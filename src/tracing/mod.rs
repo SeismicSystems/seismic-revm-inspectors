@@ -489,7 +489,7 @@ impl TracingInspector {
                         _ => unreachable!(),
                     };
                     let change =
-                        StorageChange { key: *key, value, had_value: Some(*had_value), reason };
+                        StorageChange { key: *key, value: value.to_U256(), had_value: Some(had_value.to_U256()), reason };
                     Some(change)
                 }
                 _ => None,
