@@ -32,8 +32,8 @@ clippy.lint_groups_priority = "allow"
 # eth
 alloy-sol-types = "0.8"
 alloy-primitives = "0.8"
-alloy-rpc-types = { version = "=0.3.0", features = ["eth"] }
-alloy-rpc-types-trace = { version = "0.3.0", default-features = false }
+alloy-rpc-types = { version = "=0.3.0", features = ["eth", "trace"] }
+# alloy-rpc-types-trace = { version = "0.3.0", default-features = false }
 
 revm = { version = "14.0.0", default-features = false, features = ["std"] }
 

@@ -240,6 +240,10 @@ impl DelegatingInspector {
 
                 Ok(DelegatingInspector::Prestate(prestate_config, inspector))
             }
+            GethDebugBuiltInTracerType::FlatCallTracer => {
+                // TODO support flat call tracer in mux
+                return Err(Error::UnexpectedConfig(tracer_type));
+            }
             GethDebugBuiltInTracerType::NoopTracer => {
                 if tracer_config.is_some() {
                     return Err(Error::UnexpectedConfig(tracer_type));
