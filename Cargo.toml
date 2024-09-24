@@ -33,7 +33,8 @@ clippy.lint_groups_priority = "allow"
 alloy-sol-types = "0.8"
 alloy-primitives = "0.8"
 alloy-rpc-types = { version = "0.3", features = ["eth", "trace"] }
-revm = { version = "14", default-features = false, features = ["std"] }
+
+revm = { version = "14.0.0", default-features = false, features = ["std"] }
 
 anstyle = "1.0"
 colorchoice = "1.0"
@@ -53,3 +54,15 @@ snapbox = "0.6"
 [features]
 serde = ["dep:serde", "revm/serde"]
 js-tracer = ["dep:boa_engine", "dep:boa_gc"]
+
+[patch.crates-io]
+# If our dependencies depend on these things,
+# then this will override whatever versions they point to
+# and instead use our local version
+
+# seismic-revm
+revm = { path = "../seismic-revm/crates/revm" }
+
+# seismic-alloy-core
+alloy-sol-types = { path = "../seismic-alloy-core/crates/sol-types" }
+alloy-primitives = { path = "../seismic-alloy-core/crates/primitives" }
