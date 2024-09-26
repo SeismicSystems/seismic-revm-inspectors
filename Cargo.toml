@@ -61,8 +61,8 @@ js-tracer = ["dep:boa_engine", "dep:boa_gc"]
 # and instead use our local version
 
 # seismic-revm
-revm = { path = "../seismic-revm/crates/revm" }
+revm = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "e6f24f7" }
 
 # seismic-alloy-core
-alloy-sol-types = { path = "../seismic-alloy-core/crates/sol-types" }
-alloy-primitives = { path = "../seismic-alloy-core/crates/primitives" }
+alloy-sol-types = { git = "ssh://git@github.com/SeismicSystems/seismic-alloy-core.git", rev = "738d15e" }
+alloy-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-alloy-core.git", rev = "738d15e" }
