@@ -34,7 +34,8 @@ alloy-rpc-types-eth = "0.3"
 alloy-rpc-types-trace = "0.3"
 alloy-sol-types = "0.8"
 alloy-primitives = "0.8"
-revm = { version = "14", default-features = false, features = ["std"] }
+revm = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", branch = "upstream-merge"}
+revm-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", branch = "upstream-merge"}
 
 anstyle = "1.0"
 colorchoice = "1.0"
@@ -61,8 +62,9 @@ js-tracer = ["dep:boa_engine", "dep:boa_gc"]
 # and instead use our local version
 
 # seismic-revm
-revm = { path = "../seismic-revm/crates/revm" }
+revm = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", branch = "upstream-merge"}
+revm-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", branch = "upstream-merge"}
 
 # seismic-alloy-core
-alloy-sol-types = { path = "../seismic-alloy-core/crates/sol-types" }
-alloy-primitives = { path = "../seismic-alloy-core/crates/primitives" }
+alloy-sol-types = { git = "ssh://git@github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
+alloy-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
