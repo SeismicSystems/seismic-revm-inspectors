@@ -22,7 +22,7 @@
 //! See also <https://geth.ethereum.org/docs/developers/evm-tracing/built-in-tracers>
 
 use alloy_primitives::{hex, Selector};
-use alloy_rpc_types::trace::geth::FourByteFrame;
+use alloy_rpc_types_trace::geth::FourByteFrame;
 use revm::{
     interpreter::{CallInputs, CallOutcome},
     Database, EvmContext, Inspector,
@@ -65,13 +65,19 @@ where
 
 impl From<FourByteInspector> for FourByteFrame {
     fn from(value: FourByteInspector) -> Self {
+        Self::from(&value)
+    }
+}
+
+impl From<&FourByteInspector> for FourByteFrame {
+    fn from(value: &FourByteInspector) -> Self {
         Self(
             value
                 .inner
-                .into_iter()
+                .iter()
                 .map(|((selector, calldata_size), count)| {
-                    let key = format!("0x{}-{}", hex::encode(&selector[..]), calldata_size);
-                    (key, count)
+                    let key = format!("0x{}-{}", hex::encode(selector), *calldata_size);
+                    (key, *count)
                 })
                 .collect(),
         )

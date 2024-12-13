@@ -5,12 +5,16 @@ use crate::tracing::{
     TracingInspectorConfig,
 };
 use alloy_primitives::{Address, U256, U64};
-use alloy_rpc_types::{trace::parity::*, TransactionInfo};
+use alloy_rpc_types_eth::TransactionInfo;
+use alloy_rpc_types_trace::parity::*;
 use revm::{
     db::DatabaseRef,
     primitives::{Account, ExecutionResult, ResultAndState, SpecId, KECCAK_EMPTY},
 };
-use std::collections::{HashSet, VecDeque};
+use std::{
+    collections::{HashSet, VecDeque},
+    iter::Peekable,
+};
 
 /// A type for creating parity style traces
 ///
@@ -211,33 +215,34 @@ impl ParityTraceBuilder {
             return (None, None, None);
         }
 
-        let with_traces = trace_types.contains(&TraceType::Trace);
         let with_diff = trace_types.contains(&TraceType::StateDiff);
 
-        let vm_trace =
-            if trace_types.contains(&TraceType::VmTrace) { Some(self.vm_trace()) } else { None };
+        // early return for StateDiff-only case
+        if trace_types.len() == 1 && with_diff {
+            return (None, None, Some(StateDiff::default()));
+        }
 
-        let mut traces = Vec::with_capacity(if with_traces { self.nodes.len() } else { 0 });
-        // Boolean marker to track if sorting for selfdestruct is needed
-        let mut sorting_selfdestruct = false;
+        let vm_trace = trace_types.contains(&TraceType::VmTrace).then(|| self.vm_trace());
 
-        for node in self.iter_traceable_nodes() {
-            let trace_address = self.trace_address(node.idx);
+        let traces = trace_types.contains(&TraceType::Trace).then(|| {
+            let mut traces = Vec::with_capacity(self.nodes.len());
+            // Boolean marker to track if sorting for selfdestruct is needed
+            let mut sorting_selfdestruct = false;
 
-            if with_traces {
+            for node in self.iter_traceable_nodes() {
+                let trace_address = self.trace_address(node.idx);
                 let trace = node.parity_transaction_trace(trace_address);
                 traces.push(trace);
 
-                // check if the trace node is a selfdestruct
                 if node.is_selfdestruct() {
                     // selfdestructs are not recorded as individual call traces but are derived from
                     // the call trace and are added as additional `TransactionTrace` objects in the
                     // trace array
                     let addr = {
                         let last = traces.last_mut().expect("exists");
-                        let mut addr = last.trace_address.clone();
+                        let mut addr = Vec::with_capacity(last.trace_address.len() + 1);
+                        addr.extend_from_slice(&last.trace_address);
                         addr.push(last.subtraces);
-                        // need to account for the additional selfdestruct trace
                         last.subtraces += 1;
                         addr
                     };
@@ -248,15 +253,15 @@ impl ParityTraceBuilder {
                     }
                 }
             }
-        }
 
-        // Sort the traces only if a selfdestruct trace was encountered
-        if sorting_selfdestruct {
-            traces.sort_by(|a, b| a.trace_address.cmp(&b.trace_address));
-        }
+            // Sort the traces only if a selfdestruct trace was encountered
+            if sorting_selfdestruct {
+                traces.sort_unstable_by(|a, b| a.trace_address.cmp(&b.trace_address));
+            }
+            traces
+        });
 
-        let traces = with_traces.then_some(traces);
-        let diff = with_diff.then_some(StateDiff::default());
+        let diff = with_diff.then(StateDiff::default);
 
         (traces, vm_trace, diff)
     }
@@ -271,7 +276,8 @@ impl ParityTraceBuilder {
                 .into_iter()
                 .zip(trace_addresses)
                 .filter(|(node, _)| !node.is_precompile())
-                .map(|(node, trace_address)| (node.parity_transaction_trace(trace_address), node)),
+                .map(|(node, trace_address)| (node.parity_transaction_trace(trace_address), node))
+                .peekable(),
         }
     }
 
@@ -394,8 +400,8 @@ impl ParityTraceBuilder {
 }
 
 /// An iterator for [TransactionTrace]s
-struct TransactionTraceIter<Iter> {
-    iter: Iter,
+struct TransactionTraceIter<Iter: Iterator> {
+    iter: Peekable<Iter>,
     next_selfdestruct: Option<TransactionTrace>,
 }
 
@@ -406,9 +412,15 @@ where
     type Item = TransactionTrace;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(selfdestruct) = self.next_selfdestruct.take() {
-            return Some(selfdestruct);
+        // ensure the selfdestruct trace is emitted just at the ending of the same depth
+        if let Some(selfdestruct) = &self.next_selfdestruct {
+            if self.iter.peek().map_or(true, |(next_trace, _)| {
+                selfdestruct.trace_address < next_trace.trace_address
+            }) {
+                return self.next_selfdestruct.take();
+            }
         }
+
         let (mut trace, node) = self.iter.next()?;
         if node.is_selfdestruct() {
             // since selfdestructs are emitted as additional trace, increase the trace count
@@ -557,4 +569,109 @@ where
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tracing::types::{CallKind, CallTrace};
+
+    #[test]
+    fn test_parity_suicide_simple_call() {
+        let nodes = vec![CallTraceNode {
+            trace: CallTrace {
+                kind: CallKind::Call,
+                selfdestruct_refund_target: Some(Address::ZERO),
+                ..Default::default()
+            },
+            ..Default::default()
+        }];
+
+        let traces = ParityTraceBuilder::new(nodes, None, TracingInspectorConfig::default_parity())
+            .into_transaction_traces();
+
+        assert_eq!(traces.len(), 2);
+        assert_eq!(traces[0].trace_address.len(), 0);
+        assert!(traces[0].action.is_call());
+        assert_eq!(traces[1].trace_address, vec![0]);
+        assert!(traces[1].action.is_selfdestruct());
+    }
+
+    #[test]
+    fn test_parity_suicide_with_subsequent_calls() {
+        /*
+        contract Foo {
+            function foo() public {}
+            function close(Foo f) public {
+                f.foo();
+                selfdestruct(payable(msg.sender));
+            }
+        }
+
+        contract Bar {
+            Foo foo1;
+            Foo foo2;
+
+            constructor() {
+                foo1 = new Foo();
+                foo2 = new Foo();
+            }
+
+            function close() public {
+                foo1.close(foo2);
+            }
+        }
+        */
+
+        let nodes = vec![
+            CallTraceNode {
+                parent: None,
+                children: vec![1],
+                idx: 0,
+                trace: CallTrace { depth: 0, ..Default::default() },
+                ..Default::default()
+            },
+            CallTraceNode {
+                parent: Some(0),
+                idx: 1,
+                children: vec![2],
+                trace: CallTrace {
+                    depth: 1,
+                    kind: CallKind::Call,
+                    selfdestruct_refund_target: Some(Address::ZERO),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            CallTraceNode {
+                parent: Some(1),
+                idx: 2,
+                trace: CallTrace { depth: 2, ..Default::default() },
+                ..Default::default()
+            },
+        ];
+
+        let traces = ParityTraceBuilder::new(nodes, None, TracingInspectorConfig::default_parity())
+            .into_transaction_traces();
+
+        assert_eq!(traces.len(), 4);
+
+        // [] call
+        assert_eq!(traces[0].trace_address.len(), 0);
+        assert_eq!(traces[0].subtraces, 1);
+        assert!(traces[0].action.is_call());
+
+        // [0] call
+        assert_eq!(traces[1].trace_address, vec![0]);
+        assert_eq!(traces[1].subtraces, 2);
+        assert!(traces[1].action.is_call());
+
+        // [0, 0] call
+        assert_eq!(traces[2].trace_address, vec![0, 0]);
+        assert!(traces[2].action.is_call());
+
+        // [0, 1] suicide
+        assert_eq!(traces[3].trace_address, vec![0, 1]);
+        assert!(traces[3].action.is_selfdestruct());
+    }
 }
