@@ -44,7 +44,7 @@ use types::{CallLog, CallTrace, CallTraceStep};
 mod utils;
 
 mod writer;
-pub use writer::TraceWriter;
+pub use writer::{TraceWriter, TraceWriterConfig};
 
 #[cfg(feature = "js-tracer")]
 pub mod js;
@@ -210,7 +210,7 @@ impl TracingInspector {
     /// Consumes the Inspector and returns a [GethTraceBuilder].
     #[inline]
     pub fn into_geth_builder(self) -> GethTraceBuilder<'static> {
-        GethTraceBuilder::new(self.traces.arena, self.config)
+        GethTraceBuilder::new(self.traces.arena)
     }
 
     /// Returns the  [GethTraceBuilder] for the recorded traces without consuming the type.
@@ -220,7 +220,7 @@ impl TracingInspector {
     /// starting a new transaction: [`Self::fuse`]
     #[inline]
     pub fn geth_builder(&self) -> GethTraceBuilder<'_> {
-        GethTraceBuilder::new_borrowed(&self.traces.arena, self.config)
+        GethTraceBuilder::new_borrowed(&self.traces.arena)
     }
 
     /// Returns true if we're no longer in the context of the root call.
@@ -402,7 +402,9 @@ impl TracingInspector {
             RecordedMemory::new(interp.shared_memory.context_memory())
         });
 
-        let stack = if self.config.record_stack_snapshots.is_full() {
+        let stack = if self.config.record_stack_snapshots.is_all()
+            || self.config.record_stack_snapshots.is_full()
+        {
             Some(interp.stack.data().clone())
         } else {
             None
@@ -469,7 +471,9 @@ impl TracingInspector {
 
         let step = &mut self.traces.arena[trace_idx].trace.steps[step_idx];
 
-        if self.config.record_stack_snapshots.is_pushes() {
+        if self.config.record_stack_snapshots.is_all()
+            || self.config.record_stack_snapshots.is_pushes()
+        {
             let start = interp.stack.len() - step.op.outputs() as usize;
             step.push_stack = Some(interp.stack.data()[start..].to_vec());
         }
@@ -724,5 +728,15 @@ impl TransactionContext {
     pub const fn with_tx_hash(mut self, tx_hash: B256) -> Self {
         self.tx_hash = Some(tx_hash);
         self
+    }
+}
+
+impl From<alloy_rpc_types_eth::TransactionInfo> for TransactionContext {
+    fn from(tx_info: alloy_rpc_types_eth::TransactionInfo) -> Self {
+        Self {
+            block_hash: tx_info.block_hash,
+            tx_index: tx_info.index.map(|idx| idx as usize),
+            tx_hash: tx_info.hash,
+        }
     }
 }

@@ -7,7 +7,7 @@ use alloy_rpc_types_trace::{
     geth::{CallFrame, CallLogFrame, GethDefaultTracingOptions, StructLog},
     parity::{
         Action, ActionType, CallAction, CallOutput, CallType, CreateAction, CreateOutput,
-        SelfdestructAction, TraceOutput, TransactionTrace,
+        CreationMethod, SelfdestructAction, TraceOutput, TransactionTrace,
     },
 };
 use revm::interpreter::{opcode, CallScheme, CreateScheme, InstructionResult, OpCode};
@@ -128,8 +128,20 @@ impl CallTrace {
             InstructionResult::Revert => {
                 if kind.is_parity() { "Reverted" } else { "execution reverted" }.to_string()
             }
-            InstructionResult::OutOfGas | InstructionResult::MemoryOOG => {
+            InstructionResult::OutOfGas | InstructionResult::PrecompileOOG => {
                 if kind.is_parity() { "Out of gas" } else { "out of gas" }.to_string()
+            }
+            InstructionResult::MemoryOOG => {
+                if kind.is_parity() { "Out of gas" } else { "out of gas: out of memory" }
+                    .to_string()
+            }
+            InstructionResult::MemoryLimitOOG => {
+                if kind.is_parity() { "Out of gas" } else { "out of gas: reach memory limit" }
+                    .to_string()
+            }
+            InstructionResult::InvalidOperandOOG => {
+                if kind.is_parity() { "Out of gas" } else { "out of gas: invalid operand" }
+                    .to_string()
             }
             InstructionResult::OpcodeNotFound => {
                 if kind.is_parity() { "Bad instruction" } else { "invalid opcode" }.to_string()
@@ -146,6 +158,13 @@ impl CallTrace {
                 if kind.is_parity() { "Bad instruction" } else { "invalid opcode: INVALID" }
                     .to_string()
             }
+            // TODO(mattsse): upcoming error
+            // InstructionResult::ReentrancySentryOOG => if kind.is_parity() {
+            //     "Out of gas"
+            // } else {
+            //     "out of gas: not enough gas for reentrancy sentry"
+            // }
+            // .to_string(),
             status => format!("{:?}", status),
         })
     }
@@ -379,6 +398,7 @@ impl CallTraceNode {
                     value: self.trace.value,
                     gas: self.trace.gas_limit,
                     init: self.trace.data.clone(),
+                    creation_method: self.kind().into(),
                 })
             }
         }
@@ -501,6 +521,17 @@ impl CallKind {
     #[inline]
     pub const fn is_auth_call(&self) -> bool {
         matches!(self, Self::AuthCall)
+    }
+}
+
+impl From<CallKind> for CreationMethod {
+    fn from(kind: CallKind) -> CreationMethod {
+        match kind {
+            CallKind::Create => CreationMethod::Create,
+            CallKind::Create2 => CreationMethod::Create2,
+            CallKind::EOFCreate => CreationMethod::EofCreate,
+            _ => CreationMethod::None,
+        }
     }
 }
 
