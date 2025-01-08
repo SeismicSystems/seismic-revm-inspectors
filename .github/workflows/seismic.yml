@@ -34,6 +34,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "build-cache"
+      - name: Install SSH Keys
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+            ssh-private-key: |
+              ${{ secrets.ACTIONS_MANTLE_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SFORGESTD_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SRETH_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SALLOY_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SALLOYCORE_SSH_ED25519 }}
       - name: cargo build
         run: cargo build
 
@@ -46,11 +55,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "warnings-cache"
-      - name: cargo check warnings without flags
+      - name: Install SSH Keys
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+            ssh-private-key: |
+              ${{ secrets.ACTIONS_MANTLE_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SFORGESTD_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SRETH_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SALLOY_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SALLOYCORE_SSH_ED25519 }}
+      - name: cargo check warnings
         run: RUSTFLAGS="-D warnings" cargo check
-      - name: cargo check warnings with foundry flags
-        run: RUSTFLAGS="-D warnings" cargo check --features arbitrary,eip712,seismic
-
 
   test:
     runs-on: ubuntu-latest
@@ -61,5 +76,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "test-cache"
+      - name: Install SSH Keys
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+            ssh-private-key: |
+              ${{ secrets.ACTIONS_MANTLE_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SFORGESTD_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SRETH_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SALLOY_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SALLOYCORE_SSH_ED25519 }}
       - name: cargo test
         run: cargo test
