@@ -502,8 +502,12 @@ impl TracingInspector {
                         opcode::SSTORE => StorageChangeReason::SSTORE,
                         _ => unreachable!(),
                     };
-                    let change =
-                        StorageChange { key: *key, value: value, had_value: Some(had_value.clone()), reason };
+                    let change = StorageChange {
+                        key: *key,
+                        value,
+                        had_value: Some(had_value.clone()),
+                        reason,
+                    };
                     Some(change)
                 }
                 _ => None,
