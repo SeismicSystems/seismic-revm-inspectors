@@ -24,6 +24,7 @@ use revm::{
     primitives::{AccountInfo, Bytecode, EvmState, KECCAK_EMPTY},
     DatabaseRef,
 };
+use revm_primitives::FlaggedStorage;
 use std::{cell::RefCell, rc::Rc};
 
 /// A macro that creates a native function that returns via [JsValue::from]
@@ -960,7 +961,7 @@ where
         self.0.code_by_hash_ref(_code_hash).map_err(|e| e.to_string())
     }
 
-    fn storage_ref(&self, _address: Address, _index: U256) -> Result<U256, Self::Error> {
+    fn storage_ref(&self, _address: Address, _index: U256) -> Result<FlaggedStorage, Self::Error> {
         self.0.storage_ref(_address, _index).map_err(|e| e.to_string())
     }
 

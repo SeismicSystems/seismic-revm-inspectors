@@ -34,7 +34,8 @@ alloy-rpc-types-eth = "0.8"
 alloy-rpc-types-trace = "0.8"
 alloy-sol-types = "0.8"
 alloy-primitives = { version = "0.8", features = ["map"] }
-revm = { version = "18.0.0", default-features = false, features = ["std"] }
+revm = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "b504083"}
+revm-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "b504083"}
 
 anstyle = "1.0"
 colorchoice = "1.0"
