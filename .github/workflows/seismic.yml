@@ -34,17 +34,32 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "build-cache"
-      - name: Install SSH Keys
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-            ssh-private-key: |
-              ${{ secrets.ACTIONS_MANTLE_SSH_ED25519 }}
-              ${{ secrets.ACTIONS_SFORGESTD_SSH_ED25519 }}
-              ${{ secrets.ACTIONS_SALLOYCORE_SSH_ED25519 }}
-              ${{ secrets.ACTIONS_SREVM_SSH_ED25519 }}
       - name: cargo build
         run: cargo build
-      - name: cargo check warnings
+
+  warnings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "warnings-cache"
+      - name: cargo check warnings without flags
         run: RUSTFLAGS="-D warnings" cargo check
+      - name: cargo check warnings with foundry flags
+        run: RUSTFLAGS="-D warnings" cargo check --features arbitrary,eip712,seismic
+
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "test-cache"
       - name: cargo test
         run: cargo test
