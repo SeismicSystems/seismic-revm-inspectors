@@ -505,7 +505,7 @@ impl TracingInspector {
                     let change = StorageChange {
                         key: *key,
                         value: value.into(),
-                        had_value: Some(had_value.into()),
+                        had_value: Some(*had_value),
                         reason,
                     };
                     Some(change)
