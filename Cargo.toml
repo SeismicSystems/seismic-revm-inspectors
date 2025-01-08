@@ -65,6 +65,5 @@ js-tracer = ["dep:boa_engine", "dep:boa_gc"]
 revm = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "caf5496f"}
 revm-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "caf5496f"}
 
-# seismic-alloy-core
 alloy-sol-types = { git = "ssh://git@github.com/SeismicSystems/seismic-alloy-core.git", rev = "a772c2e" }
 alloy-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-alloy-core.git", rev = "a772c2e" }
