@@ -55,3 +55,15 @@ snapbox = { version = "0.6", features = ["term-svg"] }
 [features]
 serde = ["dep:serde", "revm/serde"]
 js-tracer = ["dep:boa_engine", "dep:boa_gc"]
+
+[patch.crates-io]
+# If our dependencies depend on these things,
+# then this will override whatever versions they point to
+# and instead use our local version
+
+# seismic-revm
+revm = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "7176369" }
+
+# seismic-alloy-core
+alloy-sol-types = { git = "ssh://git@github.com/SeismicSystems/seismic-alloy-core.git", rev = "93e5949" }
+alloy-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-alloy-core.git", rev = "93e5949" }
