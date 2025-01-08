@@ -1,6 +1,6 @@
 //! Builtin functions
 
-use alloy_primitives::{hex, Address, B256, U256};
+use alloy_primitives::{hex, Address, FixedBytes, B256, U256};
 use boa_engine::{
     builtins::{array_buffer::ArrayBuffer, typed_array::TypedArray},
     js_string,
@@ -56,12 +56,12 @@ pub(crate) fn json_stringify(val: JsValue, ctx: &mut Context) -> JsResult<JsStri
     res.to_string(ctx)
 }
 
-/// Registers all the builtin functions and global bigint property
+/// Registers all the builtin functions and global bigint property.
 ///
 /// Note: this does not register the `isPrecompiled` builtin, as this requires the precompile
 /// addresses, see [PrecompileList::register_callable].
 pub(crate) fn register_builtins(ctx: &mut Context) -> JsResult<()> {
-    let big_int = ctx.eval(Source::from_bytes(BIG_INT_JS.as_bytes()))?;
+    let big_int = ctx.eval(Source::from_bytes(BIG_INT_JS))?;
     ctx.register_global_property(js_string!("bigint"), big_int, Attribute::all())?;
     ctx.register_global_builtin_callable(
         js_string!("toHex"),
@@ -88,8 +88,8 @@ pub(crate) fn register_builtins(ctx: &mut Context) -> JsResult<()> {
     Ok(())
 }
 
-/// Converts an array, hex string or Uint8Array to a []byte
-pub(crate) fn from_buf_value(val: JsValue, context: &mut Context) -> JsResult<Vec<u8>> {
+/// Converts an array, hex string or Uint8Array to a byte array.
+pub(crate) fn bytes_from_value(val: JsValue, context: &mut Context) -> JsResult<Vec<u8>> {
     if let Some(obj) = val.as_object().cloned() {
         if obj.is::<TypedArray>() {
             let array: JsTypedArray = JsTypedArray::from_object(obj)?;
@@ -107,9 +107,7 @@ pub(crate) fn from_buf_value(val: JsValue, context: &mut Context) -> JsResult<Ve
             })?;
             return Ok(buf);
         } else if obj.is::<JsString>() {
-            let js_string = obj
-                .downcast_ref::<JsString>()
-                .ok_or_else(|| JsNativeError::typ().with_message("invalid string type"))?;
+            let js_string = obj.downcast_ref::<JsString>().unwrap();
             return hex_decode_js_string(js_string.borrow());
         } else if obj.is_array() {
             let array = JsArray::from_object(obj)?;
@@ -133,23 +131,23 @@ pub(crate) fn from_buf_value(val: JsValue, context: &mut Context) -> JsResult<Ve
 }
 
 /// Create a new [JsUint8Array] array buffer from the address' bytes.
-pub(crate) fn address_to_byte_array(
+pub(crate) fn address_to_uint8_array(
     addr: Address,
     context: &mut Context,
 ) -> JsResult<JsUint8Array> {
-    JsUint8Array::from_iter(addr.0, context)
+    JsUint8Array::from_iter(addr, context)
 }
 
 /// Create a new [JsUint8Array] array buffer from the address' bytes.
-pub(crate) fn address_to_byte_array_value(
+pub(crate) fn address_to_uint8_array_value(
     addr: Address,
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    Ok(JsUint8Array::from_iter(addr.0, context)?.into())
+    address_to_uint8_array(addr, context).map(Into::into)
 }
 
 /// Create a new [JsUint8Array] from byte block.
-pub(crate) fn to_byte_array<I>(bytes: I, context: &mut Context) -> JsResult<JsUint8Array>
+pub(crate) fn to_uint8_array<I>(bytes: I, context: &mut Context) -> JsResult<JsUint8Array>
 where
     I: IntoIterator<Item = u8>,
 {
@@ -157,68 +155,59 @@ where
 }
 
 /// Create a new [JsUint8Array] object from byte block.
-pub(crate) fn to_byte_array_value<I>(bytes: I, context: &mut Context) -> JsResult<JsValue>
+pub(crate) fn to_uint8_array_value<I>(bytes: I, context: &mut Context) -> JsResult<JsValue>
 where
     I: IntoIterator<Item = u8>,
 {
-    Ok(to_byte_array(bytes, context)?.into())
+    to_uint8_array(bytes, context).map(Into::into)
 }
 
-/// Converts a buffer type to an address.
+/// Converts a slice of bytes to an address.
 ///
-/// If the buffer is larger than the address size, it will be cropped from the left
-pub(crate) fn bytes_to_address(buf: Vec<u8>) -> Address {
-    let mut address = Address::default();
-    let mut buf = &buf[..];
-    let address_len = address.0.len();
-    if buf.len() > address_len {
-        // crop from left
-        buf = &buf[buf.len() - address.0.len()..];
-    }
-    let address_slice = &mut address.0[address_len - buf.len()..];
-    address_slice.copy_from_slice(buf);
-    address
+/// See [`bytes_to_fb`] for more information.
+pub(crate) fn bytes_to_address(bytes: &[u8]) -> Address {
+    Address(bytes_to_fb(bytes))
 }
 
-/// Converts a buffer type to a hash.
+/// Converts a slice of bytes to a 32-byte fixed-size array.
 ///
-/// If the buffer is larger than the hash size, it will be cropped from the left
-pub(crate) fn bytes_to_hash(buf: Vec<u8>) -> B256 {
-    let mut hash = B256::default();
-    let mut buf = &buf[..];
-    let hash_len = hash.0.len();
-    if buf.len() > hash_len {
-        // crop from left
-        buf = &buf[buf.len() - hash.0.len()..];
-    }
-    let hash_slice = &mut hash.0[hash_len - buf.len()..];
-    hash_slice.copy_from_slice(buf);
-    hash
+/// See [`bytes_to_fb`] for more information.
+pub(crate) fn bytes_to_b256(bytes: &[u8]) -> B256 {
+    bytes_to_fb(bytes)
 }
 
-/// Converts a U256 to a bigint using the global bigint property
+/// Converts a slice of bytes to a fixed-size array.
+///
+/// If the slice is larger than the array size, it will be trimmed from the left.
+pub(crate) fn bytes_to_fb<const N: usize>(mut bytes: &[u8]) -> FixedBytes<N> {
+    if bytes.len() > N {
+        bytes = &bytes[bytes.len() - N..];
+    }
+    FixedBytes::left_padding_from(bytes)
+}
+
+/// Converts a U256 to a bigint using the global bigint property.
 pub(crate) fn to_bigint(value: U256, ctx: &mut Context) -> JsResult<JsValue> {
     let bigint = ctx.global_object().get(js_string!("bigint"), ctx)?;
-    if !bigint.is_callable() {
-        return Ok(JsValue::undefined());
-    }
-    bigint.as_callable().unwrap().call(
-        &JsValue::undefined(),
-        &[JsValue::from(js_string!(value.to_string()))],
-        ctx,
-    )
+    let Some(bigint) = bigint.as_callable() else { return Ok(JsValue::undefined()) };
+    bigint.call(&JsValue::undefined(), &[JsValue::from(js_string!(value.to_string()))], ctx)
 }
-/// Takes three arguments: a JavaScript value that represents the sender's address, a string salt
-/// value, and the initcode for the contract. Compute the address of a contract created by the
-/// sender with the given salt and code hash, then converts the resulting address back into a byte
-/// buffer for output.
+
+/// Compute the address of a contract created using CREATE2.
+///
+/// Arguments:
+/// 1. creator: The address of the contract creator
+/// 2. salt: A 32-byte salt value
+/// 3. initcode: The contract's initialization code
+///
+/// Returns: The computed contract address as an ArrayBuffer
 pub(crate) fn to_contract2(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     // Extract the sender's address, salt and initcode from the arguments
     let from = args.get_or_undefined(0).clone();
     let salt = match args.get_or_undefined(1).to_string(ctx) {
         Ok(js_string) => {
             let buf = hex_decode_js_string(&js_string)?;
-            bytes_to_hash(buf)
+            bytes_to_b256(&buf)
         }
         Err(_) => {
             return Err(JsError::from_native(
@@ -226,61 +215,66 @@ pub(crate) fn to_contract2(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
             ))
         }
     };
-
     let initcode = args.get_or_undefined(2).clone();
 
     // Convert the sender's address to a byte buffer and then to an Address
-    let buf = from_buf_value(from, ctx)?;
-    let addr = bytes_to_address(buf);
+    let buf = bytes_from_value(from, ctx)?;
+    let addr = bytes_to_address(&buf);
 
     // Convert the initcode to a byte buffer
-    let code_buf = from_buf_value(initcode, ctx)?;
+    let code_buf = bytes_from_value(initcode, ctx)?;
 
     // Compute the contract address
     let contract_addr = addr.create2_from_code(salt, code_buf);
 
     // Convert the contract address to a byte buffer and return it as an ArrayBuffer
-    address_to_byte_array_value(contract_addr, ctx)
+    address_to_uint8_array_value(contract_addr, ctx)
 }
 
-///  Converts the sender's address to a byte buffer
+/// Compute the address of a contract created by the sender with the given nonce.
+///
+/// Arguments:
+/// 1. from: The address of the contract creator
+/// 2. nonce: The creator's transaction count (optional, none is 0)
+///
+/// Returns: The computed contract address as an ArrayBuffer
 pub(crate) fn to_contract(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     // Extract the sender's address and nonce from the arguments
     let from = args.get_or_undefined(0).clone();
     let nonce = args.get_or_undefined(1).to_number(ctx)? as u64;
 
     // Convert the sender's address to a byte buffer and then to an Address
-    let buf = from_buf_value(from, ctx)?;
-    let addr = bytes_to_address(buf);
+    let buf = bytes_from_value(from, ctx)?;
+    let addr = bytes_to_address(&buf);
 
     // Compute the contract address
     let contract_addr = addr.create(nonce);
 
     // Convert the contract address to a byte buffer and return it as an ArrayBuffer
-    address_to_byte_array_value(contract_addr, ctx)
+    address_to_uint8_array_value(contract_addr, ctx)
 }
 
 /// Converts a buffer type to an address
 pub(crate) fn to_address(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let val = args.get_or_undefined(0).clone();
-    let buf = from_buf_value(val, ctx)?;
-    let address = bytes_to_address(buf);
-    address_to_byte_array_value(address, ctx)
+    let buf = bytes_from_value(val, ctx)?;
+    let address = bytes_to_address(&buf);
+    address_to_uint8_array_value(address, ctx)
 }
 
 /// Converts a buffer type to a word
 pub(crate) fn to_word(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let val = args.get_or_undefined(0).clone();
-    let buf = from_buf_value(val, ctx)?;
-    let hash = bytes_to_hash(buf);
-    to_byte_array_value(hash.0, ctx)
+    let buf = bytes_from_value(val, ctx)?;
+    let hash = bytes_to_b256(&buf);
+    to_uint8_array_value(hash, ctx)
 }
 
 /// Converts a buffer type to a hex string
 pub(crate) fn to_hex(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let val = args.get_or_undefined(0).clone();
-    let buf = from_buf_value(val, ctx)?;
-    let s = js_string!(hex::encode(buf));
+    let buf = bytes_from_value(val, ctx)?;
+    let s = js_string!(hex::encode_prefixed(buf));
     Ok(JsValue::from(s))
 }
 
@@ -310,8 +304,8 @@ impl PrecompileList {
         let is_precompiled = NativeFunction::from_copy_closure_with_captures(
             move |_this, args, precompiles, ctx| {
                 let val = args.get_or_undefined(0).clone();
-                let buf = from_buf_value(val, ctx)?;
-                let addr = bytes_to_address(buf);
+                let buf = bytes_from_value(val, ctx)?;
+                let addr = bytes_to_address(&buf);
                 Ok(precompiles.0.contains(&addr).into())
             },
             self,
@@ -341,5 +335,83 @@ mod tests {
         let result =
             big_int.as_callable().unwrap().call(&JsValue::undefined(), &[value], &mut ctx).unwrap();
         assert_eq!(result.to_string(&mut ctx).unwrap().to_std_string().unwrap(), "100");
+    }
+
+    fn as_length<T>(array: T) -> usize
+    where
+        T: Borrow<JsValue>,
+    {
+        let array = array.borrow();
+        let array = array.as_object().unwrap();
+        let array = JsUint8Array::from_object(array.clone()).unwrap();
+        array.length(&mut Context::default()).unwrap()
+    }
+
+    #[test]
+    fn test_to_hex() {
+        let mut ctx = Context::default();
+        let value = JsValue::from(js_string!("0xdeadbeef"));
+        let result = to_hex(&JsValue::undefined(), &[value], &mut ctx).unwrap();
+        assert_eq!(result.to_string(&mut ctx).unwrap().to_std_string().unwrap(), "0xdeadbeef");
+    }
+
+    #[test]
+    fn test_to_address() {
+        let mut ctx = Context::default();
+        let value = JsValue::from(js_string!("0xdeadbeef"));
+        let result = to_address(&JsValue::undefined(), &[value], &mut ctx).unwrap();
+        assert_eq!(as_length(&result), 20);
+        assert_eq!(
+            result.to_string(&mut ctx).unwrap().to_std_string().unwrap(),
+            "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,222,173,190,239"
+        );
+    }
+
+    #[test]
+    fn test_to_word() {
+        let mut ctx = Context::default();
+        let value = JsValue::from(js_string!("0xdeadbeef"));
+        let result = to_word(&JsValue::undefined(), &[value], &mut ctx).unwrap();
+        assert_eq!(as_length(&result), 32);
+        assert_eq!(
+            result.to_string(&mut ctx).unwrap().to_std_string().unwrap(),
+            "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,222,173,190,239"
+        );
+    }
+
+    #[test]
+    fn test_to_contract() {
+        let mut ctx = Context::default();
+        let from = JsValue::from(js_string!("0xdeadbeef"));
+        let nonce = JsValue::from(0);
+        let result = to_contract(&JsValue::undefined(), &[from.clone(), nonce], &mut ctx).unwrap();
+        assert_eq!(as_length(&result), 20);
+        let addr = to_hex(&JsValue::undefined(), &[result], &mut ctx).unwrap();
+        assert_eq!(
+            addr.to_string(&mut ctx).unwrap().to_std_string().unwrap(),
+            "0xe8279be14e9fe2ad2d8e52e42ca96fb33a813bbe",
+        );
+
+        // without nonce
+        let result = to_contract(&JsValue::undefined(), &[from], &mut ctx).unwrap();
+        let addr = to_hex(&JsValue::undefined(), &[result], &mut ctx).unwrap();
+        assert_eq!(
+            addr.to_string(&mut ctx).unwrap().to_std_string().unwrap(),
+            "0xe8279be14e9fe2ad2d8e52e42ca96fb33a813bbe",
+        );
+    }
+    #[test]
+    fn test_to_contract2() {
+        let mut ctx = Context::default();
+        let from = JsValue::from(js_string!("0xdeadbeef"));
+        let salt = JsValue::from(js_string!("0xdead4a17"));
+        let code = JsValue::from(js_string!("0xdeadbeef"));
+        let result = to_contract2(&JsValue::undefined(), &[from, salt, code], &mut ctx).unwrap();
+        assert_eq!(as_length(&result), 20);
+        let addr = to_hex(&JsValue::undefined(), &[result], &mut ctx).unwrap();
+        assert_eq!(
+            addr.to_string(&mut ctx).unwrap().to_std_string().unwrap(),
+            "0x8a0d8a428b30200a296dfbe693310e5d6d2c64c5"
+        );
     }
 }

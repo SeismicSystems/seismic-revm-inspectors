@@ -1,9 +1,9 @@
 [package]
 name = "revm-inspectors"
 description = "Revm inspector implementations"
-version = "0.6.0"
+version = "0.13.0"
 edition = "2021"
-rust-version = "1.79.0"
+rust-version = "1.81.0"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/paradigmxyz/revm-inspectors"
 repository = "https://github.com/paradigmxyz/revm-inspectors"
@@ -30,15 +30,16 @@ clippy.lint_groups_priority = "allow"
 
 [dependencies]
 # eth
+alloy-rpc-types-eth = "0.8"
+alloy-rpc-types-trace = "0.8"
 alloy-sol-types = "0.8"
-alloy-primitives = "0.8"
-alloy-rpc-types = { version = "0.3", features = ["eth", "trace"] }
-
-revm = { version = "14.0.0", default-features = false, features = ["std"] }
+alloy-primitives = { version = "0.8", features = ["map"] }
+revm = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "b504083"}
+revm-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "b504083"}
 
 anstyle = "1.0"
 colorchoice = "1.0"
-thiserror = "1.0"
+thiserror = "2.0"
 
 # serde
 serde = { version = "1", optional = true, features = ["derive"] }
@@ -49,7 +50,7 @@ boa_engine = { version = "0.19", optional = true }
 boa_gc = { version = "0.19", optional = true }
 
 [dev-dependencies]
-snapbox = "0.6"
+snapbox = { version = "0.6", features = ["term-svg"] }
 
 [features]
 serde = ["dep:serde", "revm/serde"]

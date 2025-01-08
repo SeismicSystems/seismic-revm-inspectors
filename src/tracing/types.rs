@@ -3,14 +3,15 @@
 use crate::tracing::{config::TraceStyle, utils, utils::convert_memory};
 pub use alloy_primitives::Log;
 use alloy_primitives::{Address, Bytes, FixedBytes, LogData, U256};
-use alloy_rpc_types::trace::{
+use alloy_rpc_types_trace::{
     geth::{CallFrame, CallLogFrame, GethDefaultTracingOptions, StructLog},
     parity::{
         Action, ActionType, CallAction, CallOutput, CallType, CreateAction, CreateOutput,
-        SelfdestructAction, TraceOutput, TransactionTrace,
+        CreationMethod, SelfdestructAction, TraceOutput, TransactionTrace,
     },
 };
 use revm::interpreter::{opcode, CallScheme, CreateScheme, InstructionResult, OpCode};
+use revm_primitives::FlaggedStorage;
 use std::collections::VecDeque;
 
 /// Decoded call data.
@@ -48,7 +49,6 @@ pub struct CallTrace {
     /// The target address of this call.
     ///
     /// This is:
-    /// - [`is_selfdestruct`](Self::is_selfdestruct): the address of the selfdestructed contract
     /// - [`CallKind::Call`] and alike: the callee, the address of the contract being called
     /// - [`CallKind::Create`] and alike: the address of the created contract
     pub address: Address,
@@ -56,6 +56,8 @@ pub struct CallTrace {
     ///
     /// Note: This is optional because not all tracers make use of this.
     pub maybe_precompile: Option<bool>,
+    /// The address of the selfdestructed contract.
+    pub selfdestruct_address: Option<Address>,
     /// Holds the target for the selfdestruct refund target.
     ///
     /// This is only `Some` if a selfdestruct was executed and the call is executed before the
@@ -126,8 +128,20 @@ impl CallTrace {
             InstructionResult::Revert => {
                 if kind.is_parity() { "Reverted" } else { "execution reverted" }.to_string()
             }
-            InstructionResult::OutOfGas | InstructionResult::MemoryOOG => {
+            InstructionResult::OutOfGas | InstructionResult::PrecompileOOG => {
                 if kind.is_parity() { "Out of gas" } else { "out of gas" }.to_string()
+            }
+            InstructionResult::MemoryOOG => {
+                if kind.is_parity() { "Out of gas" } else { "out of gas: out of memory" }
+                    .to_string()
+            }
+            InstructionResult::MemoryLimitOOG => {
+                if kind.is_parity() { "Out of gas" } else { "out of gas: reach memory limit" }
+                    .to_string()
+            }
+            InstructionResult::InvalidOperandOOG => {
+                if kind.is_parity() { "Out of gas" } else { "out of gas: invalid operand" }
+                    .to_string()
             }
             InstructionResult::OpcodeNotFound => {
                 if kind.is_parity() { "Bad instruction" } else { "invalid opcode" }.to_string()
@@ -140,6 +154,17 @@ impl CallTrace {
             InstructionResult::PrecompileError => {
                 if kind.is_parity() { "Built-in failed" } else { "precompiled failed" }.to_string()
             }
+            InstructionResult::InvalidFEOpcode => {
+                if kind.is_parity() { "Bad instruction" } else { "invalid opcode: INVALID" }
+                    .to_string()
+            }
+            // TODO(mattsse): upcoming error
+            // InstructionResult::ReentrancySentryOOG => if kind.is_parity() {
+            //     "Out of gas"
+            // } else {
+            //     "out of gas: not enough gas for reentrancy sentry"
+            // }
+            // .to_string(),
             status => format!("{:?}", status),
         })
     }
@@ -270,11 +295,7 @@ impl CallTraceNode {
 
     /// Returns the call context's 4 byte selector
     pub fn selector(&self) -> Option<FixedBytes<4>> {
-        if self.trace.data.len() < 4 {
-            None
-        } else {
-            Some(FixedBytes::from_slice(&self.trace.data[..4]))
-        }
+        (self.trace.data.len() >= 4).then(|| FixedBytes::from_slice(&self.trace.data[..4]))
     }
 
     /// Returns `true` if this trace was a selfdestruct.
@@ -321,30 +342,24 @@ impl CallTraceNode {
 
     /// If the trace is a selfdestruct, returns the `Action` for a parity trace.
     pub fn parity_selfdestruct_action(&self) -> Option<Action> {
-        if self.is_selfdestruct() {
-            Some(Action::Selfdestruct(SelfdestructAction {
-                address: self.trace.address,
+        self.is_selfdestruct().then(|| {
+            Action::Selfdestruct(SelfdestructAction {
+                address: self.trace.selfdestruct_address.unwrap_or_default(),
                 refund_address: self.trace.selfdestruct_refund_target.unwrap_or_default(),
                 balance: self.trace.selfdestruct_transferred_value.unwrap_or_default(),
-            }))
-        } else {
-            None
-        }
+            })
+        })
     }
 
     /// If the trace is a selfdestruct, returns the `CallFrame` for a geth call trace
     pub fn geth_selfdestruct_call_trace(&self) -> Option<CallFrame> {
-        if self.is_selfdestruct() {
-            Some(CallFrame {
-                typ: "SELFDESTRUCT".to_string(),
-                from: self.trace.address,
-                to: self.trace.selfdestruct_refund_target,
-                value: self.trace.selfdestruct_transferred_value,
-                ..Default::default()
-            })
-        } else {
-            None
-        }
+        self.is_selfdestruct().then(|| CallFrame {
+            typ: "SELFDESTRUCT".to_string(),
+            from: self.trace.selfdestruct_address.unwrap_or_default(),
+            to: self.trace.selfdestruct_refund_target,
+            value: self.trace.selfdestruct_transferred_value,
+            ..Default::default()
+        })
     }
 
     /// If the trace is a selfdestruct, returns the `TransactionTrace` for a parity trace.
@@ -383,6 +398,7 @@ impl CallTraceNode {
                     value: self.trace.value,
                     gas: self.trace.gas_limit,
                     init: self.trace.data.clone(),
+                    creation_method: self.kind().into(),
                 })
             }
         }
@@ -412,10 +428,19 @@ impl CallTraceNode {
 
         // we need to populate error and revert reason
         if !self.trace.success {
+            if self.kind().is_any_create() {
+                call_frame.to = None;
+            }
+
+            if !self.status().is_revert() {
+                call_frame.gas_used = U256::from(self.trace.gas_limit);
+                call_frame.output = None;
+            }
+
             call_frame.revert_reason = utils::maybe_revert_reason(self.trace.output.as_ref());
 
-            // Note: the call tracer mimics parity's trace transaction and geth maps errors to parity style error messages, <https://github.com/ethereum/go-ethereum/blob/34d507215951fb3f4a5983b65e127577989a6db8/eth/tracers/native/call_flat.go#L39-L55>
-            call_frame.error = self.trace.as_error_msg(TraceStyle::Parity);
+            // Note: regular calltracer uses geth errors, only flatCallTracer uses parity errors: <https://github.com/ethereum/go-ethereum/blob/a9523b6428238a762e1a1e55e46ead47630c3a23/eth/tracers/native/call_flat.go#L226>
+            call_frame.error = self.trace.as_error_msg(TraceStyle::Geth);
         }
 
         if include_logs && !self.logs.is_empty() {
@@ -496,6 +521,17 @@ impl CallKind {
     #[inline]
     pub const fn is_auth_call(&self) -> bool {
         matches!(self, Self::AuthCall)
+    }
+}
+
+impl From<CallKind> for CreationMethod {
+    fn from(kind: CallKind) -> CreationMethod {
+        match kind {
+            CallKind::Create => CreationMethod::Create,
+            CallKind::Create2 => CreationMethod::Create2,
+            CallKind::EOFCreate => CreationMethod::EofCreate,
+            _ => CreationMethod::None,
+        }
     }
 }
 
@@ -741,9 +777,9 @@ pub struct StorageChange {
     /// key of the storage slot
     pub key: U256,
     /// Current value of the storage slot
-    pub value: U256,
+    pub value: FlaggedStorage,
     /// The previous value of the storage slot, if any
-    pub had_value: Option<U256>,
+    pub had_value: Option<FlaggedStorage>,
     /// How this storage was accessed
     pub reason: StorageChangeReason,
 }
