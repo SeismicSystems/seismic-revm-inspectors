@@ -30,7 +30,7 @@
 </tspan>
     <tspan x="10px" y="118px"><tspan>    ├─  storage changes:</tspan>
 </tspan>
-    <tspan x="10px" y="136px"><tspan>    │   @ 0: 71 → 72</tspan>
+    <tspan x="10px" y="136px"><tspan>    │   @ 0: 71, false → 72, false</tspan>
 </tspan>
     <tspan x="10px" y="154px"><tspan>    └─ </tspan><tspan class="fg-green">← [Return] </tspan>
 </tspan>
