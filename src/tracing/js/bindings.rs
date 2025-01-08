@@ -24,8 +24,8 @@ use revm::{
     primitives::{AccountInfo, Bytecode, EvmState, KECCAK_EMPTY},
     DatabaseRef,
 };
-use std::{cell::RefCell, rc::Rc};
 use revm_primitives::FlaggedStorage;
+use std::{cell::RefCell, rc::Rc};
 
 /// A macro that creates a native function that returns via [JsValue::from]
 macro_rules! js_value_getter {
