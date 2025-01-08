@@ -41,6 +41,7 @@ jobs:
               ${{ secrets.ACTIONS_MANTLE_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SFORGESTD_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SRETH_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SREVM_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SALLOY_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SALLOYCORE_SSH_ED25519 }}
       - name: cargo build
@@ -62,6 +63,7 @@ jobs:
               ${{ secrets.ACTIONS_MANTLE_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SFORGESTD_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SRETH_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SREVM_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SALLOY_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SALLOYCORE_SSH_ED25519 }}
       - name: cargo check warnings
@@ -83,6 +85,7 @@ jobs:
               ${{ secrets.ACTIONS_MANTLE_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SFORGESTD_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SRETH_SSH_ED25519 }}
+              ${{ secrets.ACTIONS_SREVM_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SALLOY_SSH_ED25519 }}
               ${{ secrets.ACTIONS_SALLOYCORE_SSH_ED25519 }}
       - name: cargo test
