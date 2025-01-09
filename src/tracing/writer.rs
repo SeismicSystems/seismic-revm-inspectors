@@ -559,7 +559,6 @@ fn num_or_hex_value(x: FlaggedStorage) -> String {
     )
 }
 
-
 /// Formats the given U256 as a decimal number if it is short, otherwise as a hexadecimal
 /// byte-array.
 fn num_or_hex(x: U256) -> String {

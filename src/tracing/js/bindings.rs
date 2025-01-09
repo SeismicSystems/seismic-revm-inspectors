@@ -24,6 +24,7 @@ use revm::{
     primitives::{AccountInfo, Bytecode, EvmState, KECCAK_EMPTY},
     DatabaseRef,
 };
+use revm_primitives::FlaggedStorage;
 use std::{cell::RefCell, rc::Rc};
 use revm_primitives::FlaggedStorage;
 
