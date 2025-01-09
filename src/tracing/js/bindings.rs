@@ -26,7 +26,6 @@ use revm::{
 };
 use revm_primitives::FlaggedStorage;
 use std::{cell::RefCell, rc::Rc};
-use revm_primitives::FlaggedStorage;
 
 /// A macro that creates a native function that returns via [JsValue::from]
 macro_rules! js_value_getter {
