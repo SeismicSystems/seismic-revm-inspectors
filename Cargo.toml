@@ -34,8 +34,8 @@ alloy-rpc-types-eth = "0.8"
 alloy-rpc-types-trace = "0.8"
 alloy-sol-types = "0.8"
 alloy-primitives = { version = "0.8", features = ["map"] }
-revm = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "b504083"}
-revm-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "b504083"}
+revm = "18.0.0"
+revm-primitives = "14.0.0"
 
 anstyle = "1.0"
 colorchoice = "1.0"
@@ -55,3 +55,12 @@ snapbox = { version = "0.6", features = ["term-svg"] }
 [features]
 serde = ["dep:serde", "revm/serde"]
 js-tracer = ["dep:boa_engine", "dep:boa_gc"]
+
+[patch.crates-io]
+# If our dependencies depend on these things,
+# then this will override whatever versions they point to
+# and instead use our local version
+
+# seismic-revm
+revm = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "b504083" }
+revm-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "b504083"}
