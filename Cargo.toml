@@ -34,7 +34,6 @@ alloy-rpc-types-eth = "0.8"
 alloy-rpc-types-trace = "0.8"
 alloy-sol-types = "0.8"
 alloy-primitives = { version = "0.8", features = ["map"] }
-
 revm = "18.0.0"
 revm-primitives = "14.0.0"
 
