@@ -17,16 +17,11 @@ Seismic's forks of the [reth](https://github.com/paradigmxyz/reth) stack all hav
 - `main` or `master`: this branch only consists of commits from the upstream repository. However it will rarely be up-to-date with upstream. The latest commit from this branch reflects how recently Seismic has merged in upstream commits to the seismic branch
 - `seismic`: the default and production branch for these repositories. This includes all Seismic-specific code essential to make our network run
 
-# revm-inspectors
-
-Common [`seismic-revm`] inspector implementations.
-
 ## Users
 
 * [`seismic-reth`]
 * [`seismic-foundry`]
 
-[`seismic-revm`]: https://github.com/SeismicSystems/seismic-revm/
 [`seismic-reth`]: https://github.com/SeismicSystems/seismic-reth/
 [`seismic-foundry`]: https://github.com/SeismicSystems/seismic-foundry/
 
