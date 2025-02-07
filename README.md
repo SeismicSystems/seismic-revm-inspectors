@@ -19,9 +19,7 @@ Seismic's forks of the [reth](https://github.com/paradigmxyz/reth) stack all hav
 
 # revm-inspectors
 
-Common [`revm`] inspector implementations.
-
-Originally part of [`reth`] as the [`reth-revm-inspectors`] crate.
+Common [`seismic-revm`] inspector implementations.
 
 ## Users
 
@@ -29,7 +27,6 @@ Originally part of [`reth`] as the [`reth-revm-inspectors`] crate.
 * [`seismic-foundry`]
 
 [`seismic-revm`]: https://github.com/SeismicSystems/seismic-revm/
-[`seismic-reth`]: https://github.com/SeismicSystems/seismic-reth/
 [`seismic-reth`]: https://github.com/SeismicSystems/seismic-reth/
 [`seismic-foundry`]: https://github.com/SeismicSystems/seismic-foundry/
 
