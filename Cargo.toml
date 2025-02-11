@@ -1,12 +1,12 @@
 [package]
 name = "revm-inspectors"
-description = "Revm inspector implementations"
+description = "Seismic Revm inspector implementations"
 version = "0.13.0"
 edition = "2021"
 rust-version = "1.81.0"
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/paradigmxyz/revm-inspectors"
-repository = "https://github.com/paradigmxyz/revm-inspectors"
+homepage = "https://github.com/SeismicSystems/seismic-revm-inspectors"
+repository = "https://github.com/SeismicSystems/seismic-revm-inspectors"
 categories = ["cryptography"]
 keywords = ["ethereum", "evm", "inspectors", "tracing", "debugging"]
 exclude = [
@@ -57,5 +57,5 @@ serde = ["dep:serde", "revm/serde"]
 js-tracer = ["dep:boa_engine", "dep:boa_gc"]
 
 [patch.crates-io]
-revm = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "b504083" }
-revm-primitives = { git = "ssh://git@github.com/SeismicSystems/seismic-revm.git", rev = "b504083"}
+revm = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "94040cc" }
+revm-primitives = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "94040cc"}
