@@ -199,6 +199,7 @@ fn test_parity_call_selfdestruct() {
             input: input.into(),
             to,
             value: U256::ZERO,
+            tx_type: 0,
         })
     );
     assert_eq!(
