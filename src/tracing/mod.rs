@@ -173,6 +173,13 @@ impl TracingInspector {
         }
     }
 
+    /// Manually set the transaction type of the root trace.
+    pub fn set_transaction_type(&mut self, tx_type: isize) {
+        if let Some(node) = self.traces.arena.first_mut() {
+            node.trace.tx_type = tx_type;
+        }
+    }
+
     /// Manually set the gas limit of the debug root trace.
     ///
     /// This is useful if the debug root trace's gasUsed should mirror the actual gas used by the
