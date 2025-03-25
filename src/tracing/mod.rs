@@ -182,6 +182,14 @@ impl TracingInspector {
         }
     }
 
+    /// Convenience function for [TracingInspector::set_transaction_type] that consumes the
+    /// type.
+    #[inline]
+    pub fn with_transaction_type(mut self, tx_type_opt: Option<isize>) -> Self {
+        self.set_transaction_type(tx_type_opt);
+        self
+    }
+
     /// Manually set the gas limit of the debug root trace.
     ///
     /// This is useful if the debug root trace's gasUsed should mirror the actual gas used by the
