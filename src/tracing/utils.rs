@@ -1,9 +1,12 @@
-//! Util functions for revm related ops
-
+//! Utility functions for revm related ops
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use alloy_primitives::{hex, Bytes};
 use alloy_sol_types::{ContractError, GenericRevertReason};
 use revm::{
-    primitives::{SpecId, KECCAK_EMPTY},
+    primitives::{hardfork::SpecId, KECCAK_EMPTY},
     DatabaseRef,
 };
 
@@ -11,7 +14,7 @@ use revm::{
 ///
 /// See: <https://github.com/ethereum/go-ethereum/blob/366d2169fbc0e0f803b68c042b77b6b480836dbc/eth/tracers/logger/logger.go#L450-L452>
 pub(crate) fn convert_memory(data: &[u8]) -> Vec<String> {
-    let mut memory = Vec::with_capacity((data.len() + 31) / 32);
+    let mut memory = Vec::with_capacity(data.len().div_ceil(32));
     let chunks = data.chunks_exact(32);
     let remainder = chunks.remainder();
     for chunk in chunks {
@@ -28,7 +31,7 @@ pub(crate) fn convert_memory(data: &[u8]) -> Vec<String> {
 /// Get the gas used, accounting for refunds
 #[inline]
 pub(crate) fn gas_used(spec: SpecId, spent: u64, refunded: u64) -> u64 {
-    let refund_quotient = if SpecId::enabled(spec, SpecId::LONDON) { 5 } else { 2 };
+    let refund_quotient = if SpecId::is_enabled_in(spec, SpecId::LONDON) { 5 } else { 2 };
     spent - (refunded).min(spent / refund_quotient)
 }
 
@@ -38,23 +41,18 @@ pub(crate) fn gas_used(spec: SpecId, spent: u64, refunded: u64) -> u64 {
 #[inline]
 pub(crate) fn load_account_code<DB: DatabaseRef>(
     db: DB,
-    db_acc: &revm::primitives::AccountInfo,
+    db_acc: &revm::state::AccountInfo,
 ) -> Option<Bytes> {
-    db_acc
-        .code
-        .as_ref()
-        .map(|code| code.original_bytes())
-        .or_else(|| {
-            if db_acc.code_hash == KECCAK_EMPTY {
-                None
-            } else {
-                db.code_by_hash_ref(db_acc.code_hash).ok().map(|code| code.original_bytes())
-            }
-        })
-        .map(Into::into)
+    db_acc.code.as_ref().map(|code| code.original_bytes()).or_else(|| {
+        if db_acc.code_hash == KECCAK_EMPTY {
+            None
+        } else {
+            db.code_by_hash_ref(db_acc.code_hash).ok().map(|code| code.original_bytes())
+        }
+    })
 }
 
-/// Returns a non empty revert reason if the output is a revert/error.
+/// Returns a non-empty revert reason if the output is a revert/error.
 #[inline]
 pub(crate) fn maybe_revert_reason(output: &[u8]) -> Option<String> {
     let reason = match GenericRevertReason::decode(output)? {

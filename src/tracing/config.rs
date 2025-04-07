@@ -3,7 +3,7 @@ use alloy_rpc_types_trace::{
     geth::{CallConfig, FlatCallConfig, GethDefaultTracingOptions, PreStateConfig},
     parity::TraceType,
 };
-use revm::interpreter::OpCode;
+use revm::bytecode::opcode::OpCode;
 
 /// 256 bits each marking whether an opcode should be included into steps trace or not.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -340,7 +340,7 @@ impl TracingInspectorConfig {
     /// Otherwise, always returns true.
     #[inline]
     pub fn should_record_opcode(&self, op: OpCode) -> bool {
-        self.record_opcodes_filter.as_ref().map_or(true, |filter| filter.is_enabled(op))
+        self.record_opcodes_filter.as_ref().is_none_or(|filter| filter.is_enabled(op))
     }
 }
 

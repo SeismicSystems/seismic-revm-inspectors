@@ -1,6 +1,6 @@
 //! Fourbyte tracing inspector
 //!
-//! Solidity contract functions are addressed using the first four byte of the Keccak-256 hash of
+//! Solidity contract functions are addressed using the first four bytes of the Keccak-256 hash of
 //! their signature. Therefore when calling the function of a contract, the caller must send this
 //! function selector as well as the ABI-encoded arguments as call data.
 //!
@@ -20,14 +20,13 @@
 //! ```
 //!
 //! See also <https://geth.ethereum.org/docs/developers/evm-tracing/built-in-tracers>
-
-use alloy_primitives::{hex, Selector};
+use alloc::format;
+use alloy_primitives::{hex, map::HashMap, Selector};
 use alloy_rpc_types_trace::geth::FourByteFrame;
 use revm::{
     interpreter::{CallInputs, CallOutcome},
-    Database, EvmContext, Inspector,
+    Inspector,
 };
-use std::collections::HashMap;
 
 /// Fourbyte tracing inspector that records all function selectors and their calldata sizes.
 #[derive(Clone, Debug, Default)]
@@ -43,15 +42,8 @@ impl FourByteInspector {
     }
 }
 
-impl<DB> Inspector<DB> for FourByteInspector
-where
-    DB: Database,
-{
-    fn call(
-        &mut self,
-        _context: &mut EvmContext<DB>,
-        inputs: &mut CallInputs,
-    ) -> Option<CallOutcome> {
+impl<CTX> Inspector<CTX> for FourByteInspector {
+    fn call(&mut self, _context: &mut CTX, inputs: &mut CallInputs) -> Option<CallOutcome> {
         if inputs.input.len() >= 4 {
             let selector =
                 Selector::try_from(&inputs.input[..4]).expect("input is at least 4 bytes");
