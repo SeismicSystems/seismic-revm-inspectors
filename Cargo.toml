@@ -34,8 +34,8 @@ alloy-rpc-types-eth = "0.12"
 alloy-rpc-types-trace = "0.12"
 alloy-sol-types = "0.8"
 alloy-primitives = { version = "0.8", features = ["map"] }
-revm = "18.0.0"
-revm-primitives = "20.0.0"
+revm = "20.0.0"
+revm-primitives = "16.0.0"
 
 anstyle = { version = "1.0", optional = true }
 colorchoice = "1.0"
@@ -66,22 +66,22 @@ serde = ["dep:serde", "revm/serde"]
 js-tracer = ["dep:boa_engine", "dep:boa_gc"]
 
 [patch.crates-io]
-revm = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "771e0af" }
-revm-primitives = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "771e0af"}
+revm = { git = "https://github.com/SeismicSystems/seismic-revm.git", branch = "merge-seismic"}
+revm-primitives = { git = "https://github.com/SeismicSystems/seismic-revm.git", branch = "merge-seismic"}
 
-alloy-primitives = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "5dc07cc" }
-alloy-json-abi = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "5dc07cc" }
-alloy-sol-macro-expander = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "5dc07cc" }
-alloy-sol-macro-input = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "5dc07cc" }
-alloy-sol-types = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "5dc07cc" }
-alloy-sol-type-parser = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "5dc07cc" }
-alloy-dyn-abi = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "5dc07cc" }
+alloy-primitives = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
+alloy-json-abi = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
+alloy-sol-macro-expander = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
+alloy-sol-macro-input = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
+alloy-sol-types = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
+alloy-sol-type-parser = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
+alloy-dyn-abi = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
 
-alloy-consensus = { git = "https://github.com/SeismicSystems/seismic-alloy.git", rev = "5b205ac" }
-alloy-eips = { git = "https://github.com/SeismicSystems/seismic-alloy.git", rev = "5b205ac" }
-alloy-network-primitives = { git = "https://github.com/SeismicSystems/seismic-alloy.git", rev = "5b205ac" }
-alloy-rpc-types-eth = { git = "https://github.com/SeismicSystems/seismic-alloy.git", rev = "5b205ac" }
-alloy-rpc-types-trace = { git = "https://github.com/SeismicSystems/seismic-alloy.git", rev = "5b205ac" }
-alloy-serde = { git = "https://github.com/SeismicSystems/seismic-alloy.git", rev = "5b205ac" }
+alloy-consensus = { git = "https://github.com/SeismicSystems/seismic-alloy.git", branch = "upstream-merge" }
+alloy-eips = { git = "https://github.com/SeismicSystems/seismic-alloy.git", branch = "upstream-merge" }
+alloy-network-primitives = { git = "https://github.com/SeismicSystems/seismic-alloy.git", branch = "upstream-merge" }
+alloy-rpc-types-eth = { git = "https://github.com/SeismicSystems/seismic-alloy.git", branch = "upstream-merge" }
+alloy-rpc-types-trace = { git = "https://github.com/SeismicSystems/seismic-alloy.git", branch = "upstream-merge" }
+alloy-serde = { git = "https://github.com/SeismicSystems/seismic-alloy.git", branch = "upstream-merge" }
 
-seismic-enclave = { git = "https://github.com/SeismicSystems/enclave.git", rev = "3f47bf1" }
+seismic-enclave = { git = "https://github.com/SeismicSystems/seismic-enclave.git", rev = "06df897"}
