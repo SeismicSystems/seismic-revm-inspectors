@@ -19,8 +19,8 @@ use alloy_rpc_types_trace::{
 use revm::{
     bytecode::opcode::{self, OpCode},
     interpreter::{CallScheme, CreateScheme, InstructionResult},
+    state::FlaggedStorage,
 };
-use revm_primitives::FlaggedStorage;
 
 /// Decoded call data.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
