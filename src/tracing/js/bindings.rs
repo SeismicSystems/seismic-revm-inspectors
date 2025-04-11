@@ -28,10 +28,9 @@ use revm::{
     context_interface::DBErrorMarker,
     interpreter::{SharedMemory, Stack},
     primitives::KECCAK_EMPTY,
-    state::{AccountInfo, Bytecode, EvmState},
+    state::{AccountInfo, Bytecode, EvmState, FlaggedStorage},
     DatabaseRef,
 };
-use revm_primitives::FlaggedStorage;
 
 /// A macro that creates a native function that returns via [JsValue::from]
 macro_rules! js_value_getter {
