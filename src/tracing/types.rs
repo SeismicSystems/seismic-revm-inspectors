@@ -98,8 +98,6 @@ pub struct CallTrace {
     pub steps: Vec<CallTraceStep>,
     /// Optional complementary decoded call data.
     pub decoded: DecodedCallTrace,
-    /// The type of transaction
-    pub tx_type: isize,
 }
 
 impl CallTrace {
@@ -407,7 +405,6 @@ impl CallTraceNode {
                 gas: self.trace.gas_limit,
                 input: self.trace.data.clone(),
                 call_type: self.kind().into(),
-                tx_type: self.trace.tx_type,
             }),
             CallKind::Create | CallKind::Create2 | CallKind::EOFCreate => {
                 Action::Create(CreateAction {
@@ -436,7 +433,6 @@ impl CallTraceNode {
             revert_reason: None,
             calls: Default::default(),
             logs: Default::default(),
-            tx_type: self.trace.tx_type,
         };
 
         if self.trace.kind.is_static_call() {
