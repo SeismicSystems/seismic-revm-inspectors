@@ -32,8 +32,10 @@ clippy.lint_groups_priority = "allow"
 # eth
 alloy-rpc-types-eth = "0.12"
 alloy-rpc-types-trace = "0.12"
+
 alloy-sol-types = "0.8"
 alloy-primitives = { version = "0.8", features = ["map"] }
+
 revm = "20.0.0"
 
 anstyle = { version = "1.0", optional = true }
@@ -74,5 +76,8 @@ alloy-sol-macro-input = { git = "https://github.com/SeismicSystems/seismic-alloy
 alloy-sol-types = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
 alloy-sol-type-parser = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
 alloy-dyn-abi = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
+
+alloy-rpc-types-eth = { git = "https://github.com/SeismicSystems/seismic-alloy.git", rev = "7345366" }
+alloy-rpc-types-trace = { git = "https://github.com/SeismicSystems/seismic-alloy.git", rev = "7345366" }
 
 seismic-enclave = { git = "https://github.com/SeismicSystems/seismic-enclave.git", rev = "06df897"}
