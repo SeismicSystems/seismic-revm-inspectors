@@ -67,7 +67,7 @@ serde = ["dep:serde", "revm/serde"]
 js-tracer = ["dep:boa_engine", "dep:boa_gc"]
 
 [patch.crates-io]
-revm = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "1ac4757"}
+revm = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "906fa09"}
 
 alloy-primitives = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }
 alloy-json-abi = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", branch = "upstream-merge" }

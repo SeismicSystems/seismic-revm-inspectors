@@ -9,7 +9,7 @@ use alloc::{format, string::String, vec::Vec};
 use alloy_primitives::{address, hex, map::HashMap, Address, B256, U256};
 use anstyle::{AnsiColor, Color, Style};
 use colorchoice::ColorChoice;
-use revm::state::FlaggedStorage;
+use revm::primitives::FlaggedStorage;
 use std::io::{self, Write};
 
 const CHEATCODE_ADDRESS: Address = address!("7109709ECfa91a80626fF3989D68f67F5b1DD12D");
