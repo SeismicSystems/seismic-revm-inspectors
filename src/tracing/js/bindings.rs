@@ -27,8 +27,8 @@ use revm::{
     bytecode::opcode::{OpCode, PUSH0, PUSH32},
     context_interface::DBErrorMarker,
     interpreter::{SharedMemory, Stack},
-    primitives::KECCAK_EMPTY,
-    state::{AccountInfo, Bytecode, EvmState, FlaggedStorage},
+    primitives::{FlaggedStorage, KECCAK_EMPTY},
+    state::{AccountInfo, Bytecode, EvmState},
     DatabaseRef,
 };
 
