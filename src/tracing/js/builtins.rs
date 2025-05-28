@@ -1,6 +1,7 @@
 //! Builtin functions
 
-use alloy_primitives::{hex, Address, FixedBytes, B256, U256};
+use alloc::{format, string::ToString, vec::Vec};
+use alloy_primitives::{hex, map::HashSet, Address, FixedBytes, B256, U256};
 use boa_engine::{
     builtins::{array_buffer::ArrayBuffer, typed_array::TypedArray},
     js_string,
@@ -9,7 +10,7 @@ use boa_engine::{
     Context, JsArgs, JsError, JsNativeError, JsResult, JsString, JsValue, NativeFunction, Source,
 };
 use boa_gc::{empty_trace, Finalize, Trace};
-use std::{borrow::Borrow, collections::HashSet};
+use core::borrow::Borrow;
 
 /// bigIntegerJS is the minified version of <https://github.com/peterolson/BigInteger.js>.
 pub(crate) const BIG_INT_JS: &str = include_str!("bigint.js");
@@ -27,12 +28,12 @@ pub(crate) fn to_serde_value(val: JsValue, ctx: &mut Context) -> JsResult<serde_
         let json = json.to_std_string().map_err(|err| {
             JsError::from_native(
                 JsNativeError::error()
-                    .with_message(format!("failed to convert JSON to string: {}", err)),
+                    .with_message(format!("failed to convert JSON to string: {err}")),
             )
         })?;
         serde_json::from_str(&json).map_err(|err| {
             JsError::from_native(
-                JsNativeError::error().with_message(format!("failed to parse JSON: {}", err)),
+                JsNativeError::error().with_message(format!("failed to parse JSON: {err}")),
             )
         })
     } else {

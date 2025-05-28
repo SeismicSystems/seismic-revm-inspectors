@@ -1,6 +1,12 @@
 //! Types for representing call trace items.
 
 use crate::tracing::{config::TraceStyle, utils, utils::convert_memory};
+use alloc::{
+    collections::VecDeque,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 pub use alloy_primitives::Log;
 use alloy_primitives::{Address, Bytes, FixedBytes, LogData, U256};
 use alloy_rpc_types_trace::{
@@ -10,9 +16,10 @@ use alloy_rpc_types_trace::{
         CreationMethod, SelfdestructAction, TraceOutput, TransactionTrace,
     },
 };
-use revm::interpreter::{opcode, CallScheme, CreateScheme, InstructionResult, OpCode};
-use revm_primitives::FlaggedStorage;
-use std::collections::VecDeque;
+use revm::{
+    bytecode::opcode::{self, OpCode},
+    interpreter::{CallScheme, CreateScheme, InstructionResult},
+};
 
 /// Decoded call data.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -125,50 +132,7 @@ impl CallTrace {
 
     /// Returns the error message if it is an erroneous result.
     pub(crate) fn as_error_msg(&self, kind: TraceStyle) -> Option<String> {
-        // See also <https://github.com/ethereum/go-ethereum/blob/34d507215951fb3f4a5983b65e127577989a6db8/eth/tracers/native/call_flat.go#L39-L55>
-        self.is_error().then(|| match self.status {
-            InstructionResult::Revert => {
-                if kind.is_parity() { "Reverted" } else { "execution reverted" }.to_string()
-            }
-            InstructionResult::OutOfGas | InstructionResult::PrecompileOOG => {
-                if kind.is_parity() { "Out of gas" } else { "out of gas" }.to_string()
-            }
-            InstructionResult::MemoryOOG => {
-                if kind.is_parity() { "Out of gas" } else { "out of gas: out of memory" }
-                    .to_string()
-            }
-            InstructionResult::MemoryLimitOOG => {
-                if kind.is_parity() { "Out of gas" } else { "out of gas: reach memory limit" }
-                    .to_string()
-            }
-            InstructionResult::InvalidOperandOOG => {
-                if kind.is_parity() { "Out of gas" } else { "out of gas: invalid operand" }
-                    .to_string()
-            }
-            InstructionResult::OpcodeNotFound => {
-                if kind.is_parity() { "Bad instruction" } else { "invalid opcode" }.to_string()
-            }
-            InstructionResult::StackOverflow => "Out of stack".to_string(),
-            InstructionResult::InvalidJump => {
-                if kind.is_parity() { "Bad jump destination" } else { "invalid jump destination" }
-                    .to_string()
-            }
-            InstructionResult::PrecompileError => {
-                if kind.is_parity() { "Built-in failed" } else { "precompiled failed" }.to_string()
-            }
-            InstructionResult::InvalidFEOpcode => {
-                if kind.is_parity() { "Bad instruction" } else { "invalid opcode: INVALID" }
-                    .to_string()
-            }
-            // TODO(mattsse): upcoming error
-            // InstructionResult::ReentrancySentryOOG => if kind.is_parity() {
-            //     "Out of gas"
-            // } else {
-            //     "out of gas: not enough gas for reentrancy sentry"
-            // }
-            // .to_string(),
-            status => format!("{:?}", status),
-        })
+        utils::fmt_error_msg(self.status, kind)
     }
 }
 
@@ -332,13 +296,11 @@ impl CallTraceNode {
                 gas_used: self.trace.gas_used,
                 output: self.trace.output.clone(),
             }),
-            CallKind::Create | CallKind::Create2 | CallKind::EOFCreate => {
-                TraceOutput::Create(CreateOutput {
-                    gas_used: self.trace.gas_used,
-                    code: self.trace.output.clone(),
-                    address: self.trace.address,
-                })
-            }
+            CallKind::Create | CallKind::Create2 => TraceOutput::Create(CreateOutput {
+                gas_used: self.trace.gas_used,
+                code: self.trace.output.clone(),
+                address: self.trace.address,
+            }),
         }
     }
 
@@ -393,17 +355,15 @@ impl CallTraceNode {
                 gas: self.trace.gas_limit,
                 input: self.trace.data.clone(),
                 call_type: self.kind().into(),
-                tx_type: self.trace.tx_type,
+                // tx_type: self.trace.tx_type,
             }),
-            CallKind::Create | CallKind::Create2 | CallKind::EOFCreate => {
-                Action::Create(CreateAction {
-                    from: self.trace.caller,
-                    value: self.trace.value,
-                    gas: self.trace.gas_limit,
-                    init: self.trace.data.clone(),
-                    creation_method: self.kind().into(),
-                })
-            }
+            CallKind::Create | CallKind::Create2 => Action::Create(CreateAction {
+                from: self.trace.caller,
+                value: self.trace.value,
+                gas: self.trace.gas_limit,
+                init: self.trace.data.clone(),
+                creation_method: self.kind().into(),
+            }),
         }
     }
 
@@ -422,7 +382,7 @@ impl CallTraceNode {
             revert_reason: None,
             calls: Default::default(),
             logs: Default::default(),
-            tx_type: self.trace.tx_type,
+            // tx_type: self.trace.tx_type,
         };
 
         if self.trace.kind.is_static_call() {
@@ -484,8 +444,6 @@ pub enum CallKind {
     Create,
     /// Represents a contract creation operation using the CREATE2 opcode.
     Create2,
-    /// Represents an EOF contract creation operation.
-    EOFCreate,
 }
 
 impl CallKind {
@@ -499,14 +457,13 @@ impl CallKind {
             Self::AuthCall => "AUTHCALL",
             Self::Create => "CREATE",
             Self::Create2 => "CREATE2",
-            Self::EOFCreate => "EOF_CREATE",
         }
     }
 
     /// Returns true if the call is a create
     #[inline]
     pub const fn is_any_create(&self) -> bool {
-        matches!(self, Self::Create | Self::Create2 | Self::EOFCreate)
+        matches!(self, Self::Create | Self::Create2)
     }
 
     /// Returns true if the call is a delegate of some sorts
@@ -533,14 +490,13 @@ impl From<CallKind> for CreationMethod {
         match kind {
             CallKind::Create => CreationMethod::Create,
             CallKind::Create2 => CreationMethod::Create2,
-            CallKind::EOFCreate => CreationMethod::EofCreate,
             _ => CreationMethod::None,
         }
     }
 }
 
-impl std::fmt::Display for CallKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for CallKind {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self.to_str())
     }
 }
@@ -561,6 +517,7 @@ impl From<CreateScheme> for CallKind {
         match create {
             CreateScheme::Create => Self::Create,
             CreateScheme::Create2 { .. } => Self::Create2,
+            CreateScheme::Custom { .. } => Self::Create,
         }
     }
 }
@@ -573,7 +530,7 @@ impl From<CallKind> for ActionType {
             | CallKind::DelegateCall
             | CallKind::CallCode
             | CallKind::AuthCall => Self::Call,
-            CallKind::Create | CallKind::Create2 | CallKind::EOFCreate => Self::Create,
+            CallKind::Create | CallKind::Create2 => Self::Create,
         }
     }
 }
@@ -585,7 +542,7 @@ impl From<CallKind> for CallType {
             CallKind::StaticCall => Self::StaticCall,
             CallKind::CallCode => Self::CallCode,
             CallKind::DelegateCall => Self::DelegateCall,
-            CallKind::Create | CallKind::Create2 | CallKind::EOFCreate => Self::None,
+            CallKind::Create | CallKind::Create2 => Self::None,
             CallKind::AuthCall => Self::AuthCall,
         }
     }
@@ -633,7 +590,7 @@ pub enum DecodedTraceStep {
     /// Keeps decoded internal call data and an index of the step where the internal call execution
     /// ends.
     InternalCall(DecodedInternalCall, usize),
-    /// Arbitrary line reperesenting the step. Might be used for displaying individual opcodes.
+    /// Arbitrary line representing the step. Might be used for displaying individual opcodes.
     Line(String),
 }
 
@@ -861,7 +818,6 @@ mod opcode_serde {
         D: Deserializer<'de>,
     {
         let op = u8::deserialize(deserializer)?;
-        Ok(OpCode::new(op)
-            .unwrap_or_else(|| OpCode::new(revm::interpreter::opcode::INVALID).unwrap()))
+        Ok(OpCode::new(op).unwrap_or_else(|| OpCode::new(revm::bytecode::opcode::INVALID).unwrap()))
     }
 }

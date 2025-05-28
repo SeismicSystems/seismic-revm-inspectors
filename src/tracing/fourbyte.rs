@@ -1,6 +1,6 @@
 //! Fourbyte tracing inspector
 //!
-//! Solidity contract functions are addressed using the first four byte of the Keccak-256 hash of
+//! Solidity contract functions are addressed using the first four bytes of the Keccak-256 hash of
 //! their signature. Therefore when calling the function of a contract, the caller must send this
 //! function selector as well as the ABI-encoded arguments as call data.
 //!
@@ -20,14 +20,14 @@
 //! ```
 //!
 //! See also <https://geth.ethereum.org/docs/developers/evm-tracing/built-in-tracers>
-
-use alloy_primitives::{hex, Selector};
+use alloc::format;
+use alloy_primitives::{hex, map::HashMap, Selector};
 use alloy_rpc_types_trace::geth::FourByteFrame;
 use revm::{
-    interpreter::{CallInputs, CallOutcome},
-    Database, EvmContext, Inspector,
+    context::{ContextTr, LocalContextTr},
+    interpreter::{CallInput, CallInputs, CallOutcome},
+    Inspector,
 };
-use std::collections::HashMap;
 
 /// Fourbyte tracing inspector that records all function selectors and their calldata sizes.
 #[derive(Clone, Debug, Default)]
@@ -43,19 +43,26 @@ impl FourByteInspector {
     }
 }
 
-impl<DB> Inspector<DB> for FourByteInspector
-where
-    DB: Database,
-{
-    fn call(
-        &mut self,
-        _context: &mut EvmContext<DB>,
-        inputs: &mut CallInputs,
-    ) -> Option<CallOutcome> {
+impl<CTX: ContextTr> Inspector<CTX> for FourByteInspector {
+    fn call(&mut self, context: &mut CTX, inputs: &mut CallInputs) -> Option<CallOutcome> {
         if inputs.input.len() >= 4 {
+            let r;
+            let input_bytes = match &inputs.input {
+                CallInput::SharedBuffer(range) => {
+                    match context.local().shared_memory_buffer_slice(range.clone()) {
+                        Some(slice) => {
+                            r = slice;
+                            &*r
+                        }
+                        None => &[],
+                    }
+                }
+                CallInput::Bytes(bytes) => bytes.as_ref(),
+            };
+
             let selector =
-                Selector::try_from(&inputs.input[..4]).expect("input is at least 4 bytes");
-            let calldata_size = inputs.input[4..].len();
+                Selector::try_from(&input_bytes[..4]).expect("input is at least 4 bytes");
+            let calldata_size = input_bytes[4..].len();
             *self.inner.entry((selector, calldata_size)).or_default() += 1;
         }
 
