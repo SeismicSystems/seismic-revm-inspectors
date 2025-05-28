@@ -984,7 +984,11 @@ where
         self.0.code_by_hash_ref(_code_hash).map_err(|e| e.to_string().into())
     }
 
-    fn storage_ref(&self, _address: Address, _index: U256) -> Result<revm_primitives::FlaggedStorage, Self::Error> {
+    fn storage_ref(
+        &self,
+        _address: Address,
+        _index: U256,
+    ) -> Result<revm_primitives::FlaggedStorage, Self::Error> {
         self.0.storage_ref(_address, _index).map_err(|e| e.to_string().into())
     }
 
