@@ -738,9 +738,9 @@ pub struct StorageChange {
     /// key of the storage slot
     pub key: U256,
     /// Current value of the storage slot
-    pub value: FlaggedStorage,
+    pub value: revm::primitives::FlaggedStorage,
     /// The previous value of the storage slot, if any
-    pub had_value: Option<FlaggedStorage>,
+    pub had_value: Option<revm::primitives::FlaggedStorage>,
     /// How this storage was accessed
     pub reason: StorageChangeReason,
 }

@@ -67,8 +67,6 @@ serde = ["dep:serde", "revm/serde"]
 js-tracer = ["dep:boa_engine", "dep:boa_gc"]
 
 [patch.crates-io]
-seismic-enclave = { git = "https://github.com/SeismicSystems/enclave.git", rev = "3f47bf1" }
-
 revm = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "8450eab" }
 revm-primitives = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "8450eab"}
 

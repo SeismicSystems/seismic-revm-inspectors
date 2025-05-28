@@ -545,7 +545,7 @@ fn use_colors(choice: ColorChoice) -> bool {
 
 /// Formats the given FlaggedStorage as a decimal number if it is short, otherwise as a hexadecimal
 /// byte-array.
-fn num_or_hex_value(x: FlaggedStorage) -> String {
+fn num_or_hex_value(x: revm::primitives::FlaggedStorage) -> String {
     format!(
         "{value}, {flag}",
         value = if x.value < U256::from(1e6 as u128) {
