@@ -988,7 +988,7 @@ where
         &self,
         _address: Address,
         _index: U256,
-    ) -> Result<revm_primitives::FlaggedStorage, Self::Error> {
+    ) -> Result<alloy_primitives::FlaggedStorage, Self::Error> {
         self.0.storage_ref(_address, _index).map_err(|e| e.to_string().into())
     }
 
