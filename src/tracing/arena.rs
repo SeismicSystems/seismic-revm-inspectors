@@ -1,4 +1,5 @@
 use super::types::{CallTrace, CallTraceNode, TraceMemberOrder};
+use alloc::{vec, vec::Vec};
 
 /// An arena of recorded traces.
 ///
@@ -91,6 +92,7 @@ impl CallTraceArena {
 }
 
 /// How to push a trace into the arena
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PushTraceKind {
     /// This will _only_ push the trace into the arena.
     PushOnly,

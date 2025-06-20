@@ -9,15 +9,22 @@ use crate::{
         utils::gas_used,
     },
 };
-use alloy_primitives::{Address, Bytes, Log, B256, U256};
+use alloc::vec::Vec;
+use core::borrow::Borrow;
 use revm::{
+    bytecode::opcode::{self, OpCode},
+    context::{JournalTr, LocalContextTr},
+    context_interface::ContextTr,
+    inspector::JournalExt,
     interpreter::{
-        opcode::{self},
-        CallInputs, CallOutcome, CallScheme, CreateInputs, CreateOutcome, EOFCreateInputs,
-        InstructionResult, Interpreter, InterpreterResult, OpCode,
+        interpreter_types::{
+            Immediates, InputsTr, Jumps, LoopControl, ReturnData, RuntimeFlag, SubRoutineStack,
+        },
+        CallInput, CallInputs, CallOutcome, CallScheme, CreateInputs, CreateOutcome,
+        InstructionResult, Interpreter, InterpreterResult,
     },
-    primitives::SpecId,
-    Database, EvmContext, Inspector, JournalEntry,
+    primitives::{hardfork::SpecId, Address, Bytes, Log, B256, U256},
+    Inspector, JournalEntry,
 };
 
 mod arena;
@@ -43,7 +50,9 @@ use types::{CallLog, CallTrace, CallTraceStep};
 
 mod utils;
 
+#[cfg(feature = "std")]
 mod writer;
+#[cfg(feature = "std")]
 pub use writer::{TraceWriter, TraceWriterConfig};
 
 #[cfg(feature = "js-tracer")]
@@ -72,6 +81,8 @@ pub struct TracingInspector {
     step_stack: Vec<StackStep>,
     /// Tracks the return value of the last call
     last_call_return_data: Option<Bytes>,
+    /// Tracks the journal len in the step, used in step_end to check if the journal has changed
+    last_journal_len: usize,
     /// The spec id of the EVM.
     ///
     /// This is filled during execution.
@@ -97,6 +108,7 @@ impl TracingInspector {
             trace_stack,
             step_stack,
             last_call_return_data,
+            last_journal_len,
             spec_id,
             // kept
             config: _,
@@ -106,6 +118,7 @@ impl TracingInspector {
         step_stack.clear();
         last_call_return_data.take();
         spec_id.take();
+        *last_journal_len = 0;
     }
 
     /// Resets the inspector to it's initial state of [Self::new].
@@ -250,13 +263,13 @@ impl TracingInspector {
     ///
     /// Returns true if the `to` address is a precompile contract and the value is zero.
     #[inline]
-    fn is_precompile_call<DB: Database>(
+    fn is_precompile_call<CTX: ContextTr<Journal: JournalExt>>(
         &self,
-        context: &EvmContext<DB>,
+        context: &CTX,
         to: &Address,
         value: &U256,
     ) -> bool {
-        if context.precompiles.contains(to) {
+        if context.journal_ref().precompile_addresses().contains(to) {
             // only if this is _not_ the root call
             return self.is_deep() && value.is_zero();
         }
@@ -307,9 +320,9 @@ impl TracingInspector {
     ///
     /// Invoked on [Inspector::call].
     #[allow(clippy::too_many_arguments)]
-    fn start_trace_on_call<DB: Database>(
+    fn start_trace_on_call<CTX: ContextTr>(
         &mut self,
-        context: &EvmContext<DB>,
+        context: &mut CTX,
         address: Address,
         input_data: Bytes,
         value: U256,
@@ -331,7 +344,7 @@ impl TracingInspector {
             0,
             push_kind,
             CallTrace {
-                depth: context.journaled_state.depth() as usize,
+                depth: context.journal().depth(),
                 address,
                 kind,
                 data: input_data,
@@ -352,9 +365,8 @@ impl TracingInspector {
     /// # Panics
     ///
     /// This expects an existing trace [Self::start_trace_on_call]
-    fn fill_trace_on_call_end<DB: Database>(
+    fn fill_trace_on_call_end(
         &mut self,
-        _context: &mut EvmContext<DB>,
         result: &InterpreterResult,
         created_address: Option<Address>,
     ) {
@@ -386,14 +398,18 @@ impl TracingInspector {
     /// This expects an existing [CallTrace], in other words, this panics if not within the context
     /// of a call.
     #[cold]
-    fn start_step<DB: Database>(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
+    fn start_step<CTX: ContextTr<Journal: JournalExt>>(
+        &mut self,
+        interp: &mut Interpreter,
+        context: &mut CTX,
+    ) {
         let trace_idx = self.last_trace_idx();
         let trace = &mut self.traces.arena[trace_idx];
 
         let step_idx = trace.trace.steps.len();
         // We always want an OpCode, even it is unknown because it could be an additional opcode
         // that not a known constant.
-        let op = unsafe { OpCode::new_unchecked(interp.current_opcode()) };
+        let op = unsafe { OpCode::new_unchecked(interp.bytecode.opcode()) };
 
         let record = self.config.should_record_opcode(op);
 
@@ -416,7 +432,7 @@ impl TracingInspector {
                     }
                 }
             }
-            RecordedMemory::new(interp.shared_memory.context_memory())
+            RecordedMemory::new(&interp.memory.borrow().context_memory())
         });
 
         let stack = if self.config.record_stack_snapshots.is_all()
@@ -426,37 +442,41 @@ impl TracingInspector {
         } else {
             None
         };
-        let returndata = self
-            .config
-            .record_returndata_snapshots
-            .then(|| interp.return_data_buffer.clone())
-            .unwrap_or_default();
-
-        let gas_used =
-            gas_used(context.spec_id(), interp.gas.spent(), interp.gas.refunded() as u64);
-
-        let immediate_bytes = if self.config.record_immediate_bytes {
-            let pc = interp.program_counter();
-            let size = immediate_size(op, &interp.bytecode[pc + 1..]);
-            let start = pc + 1;
-            let end = pc + 1 + size as usize;
-            (size > 0 && end <= interp.bytecode.len()).then(|| interp.bytecode.slice(start..end))
+        let returndata = if self.config.record_returndata_snapshots {
+            interp.return_data.buffer().to_vec().into()
         } else {
-            None
+            Default::default()
         };
 
+        let gas_used = gas_used(
+            interp.runtime_flag.spec_id(),
+            interp.control.gas.spent(),
+            interp.control.gas.refunded() as u64,
+        );
+
+        let mut immediate_bytes = None;
+        if self.config.record_immediate_bytes {
+            let size = immediate_size(&interp.bytecode);
+            if size != 0 {
+                immediate_bytes =
+                    Some(interp.bytecode.read_slice(size as usize + 1)[1..].to_vec().into());
+            }
+        }
+
+        self.last_journal_len = context.journal_ref().journal().len();
+
         trace.trace.steps.push(CallTraceStep {
-            depth: context.journaled_state.depth(),
-            pc: interp.program_counter(),
-            code_section_idx: interp.function_stack.current_code_idx,
+            depth: context.journal().depth() as u64,
+            pc: interp.bytecode.pc(),
+            code_section_idx: interp.sub_routine.routine_idx(),
             op,
-            contract: interp.contract.target_address,
+            contract: interp.input.target_address(),
             stack,
             push_stack: None,
             memory,
             returndata,
-            gas_remaining: interp.gas.remaining(),
-            gas_refund_counter: interp.gas.refunded() as u64,
+            gas_remaining: interp.control.gas().remaining(),
+            gas_refund_counter: interp.control.gas().refunded() as u64,
             gas_used,
             decoded: None,
             immediate_bytes,
@@ -474,10 +494,10 @@ impl TracingInspector {
     ///
     /// Invoked on [Inspector::step_end].
     #[cold]
-    fn fill_step_on_step_end<DB: Database>(
+    fn fill_step_on_step_end<CTX: ContextTr<Journal: JournalExt>>(
         &mut self,
         interp: &mut Interpreter,
-        context: &mut EvmContext<DB>,
+        context: &mut CTX,
     ) {
         let StackStep { trace_idx, step_idx, record } =
             self.step_stack.pop().expect("can't fill step without starting a step first");
@@ -491,21 +511,18 @@ impl TracingInspector {
         if self.config.record_stack_snapshots.is_all()
             || self.config.record_stack_snapshots.is_pushes()
         {
-            let start = interp.stack.len() - step.op.outputs() as usize;
+            // this can potentially underflow if the stack is malformed
+            let start = interp.stack.len().saturating_sub(step.op.outputs() as usize);
             step.push_stack = Some(interp.stack.data()[start..].to_vec());
         }
 
-        if self.config.record_state_diff {
+        let journal = context.journal_ref().journal();
+
+        // If journal has not changed, there is no state change to be recorded.
+        if self.config.record_state_diff && journal.len() != self.last_journal_len {
             let op = step.op.get();
 
-            let journal_entry = context
-                .journaled_state
-                .journal
-                .last()
-                // This should always work because revm initializes it as `vec![vec![]]`
-                // See [JournaledState::new](revm::JournaledState)
-                .expect("exists; initialized with vec")
-                .last();
+            let journal_entry = journal.last();
 
             step.storage_change = match (op, journal_entry) {
                 (
@@ -513,7 +530,8 @@ impl TracingInspector {
                     Some(JournalEntry::StorageChanged { address, key, had_value }),
                 ) => {
                     // SAFETY: (Address,key) exists if part if StorageChange
-                    let value = context.journaled_state.state[address].storage[key].present_value();
+                    let value =
+                        context.journal_ref().evm_state()[address].storage[key].present_value();
                     let reason = match op {
                         opcode::SLOAD => StorageChangeReason::SLOAD,
                         opcode::SSTORE => StorageChangeReason::SSTORE,
@@ -534,32 +552,32 @@ impl TracingInspector {
         // The gas cost is the difference between the recorded gas remaining at the start of the
         // step the remaining gas here, at the end of the step.
         // TODO: Figure out why this can overflow. https://github.com/paradigmxyz/revm-inspectors/pull/38
-        step.gas_cost = step.gas_remaining.saturating_sub(interp.gas.remaining());
+        step.gas_cost = step.gas_remaining.saturating_sub(interp.control.gas().remaining());
 
         // set the status
-        step.status = interp.instruction_result;
+        step.status = interp.control.instruction_result();
     }
 }
 
-impl<DB> Inspector<DB> for TracingInspector
+impl<CTX> Inspector<CTX> for TracingInspector
 where
-    DB: Database,
+    CTX: ContextTr<Journal: JournalExt>,
 {
     #[inline]
-    fn step(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
+    fn step(&mut self, interp: &mut Interpreter, context: &mut CTX) {
         if self.config.record_steps {
             self.start_step(interp, context);
         }
     }
 
     #[inline]
-    fn step_end(&mut self, interp: &mut Interpreter, context: &mut EvmContext<DB>) {
+    fn step_end(&mut self, interp: &mut Interpreter, context: &mut CTX) {
         if self.config.record_steps {
             self.fill_step_on_step_end(interp, context);
         }
     }
 
-    fn log(&mut self, _interp: &mut Interpreter, _context: &mut EvmContext<DB>, log: &Log) {
+    fn log(&mut self, _interp: &mut Interpreter, _context: &mut CTX, log: Log) {
         if self.config.record_logs {
             let trace = self.last_trace();
             trace.ordering.push(TraceMemberOrder::Log(trace.logs.len()));
@@ -567,11 +585,7 @@ where
         }
     }
 
-    fn call(
-        &mut self,
-        context: &mut EvmContext<DB>,
-        inputs: &mut CallInputs,
-    ) -> Option<CallOutcome> {
+    fn call(&mut self, context: &mut CTX, inputs: &mut CallInputs) -> Option<CallOutcome> {
         // determine correct `from` and `to` based on the call scheme
         let (from, to) = match inputs.scheme {
             CallScheme::DelegateCall | CallScheme::CallCode | CallScheme::ExtDelegateCall => {
@@ -598,10 +612,11 @@ where
             .exclude_precompile_calls
             .then(|| self.is_precompile_call(context, &to, &value));
 
+        let input = inputs.input_data(context);
         self.start_trace_on_call(
             context,
             to,
-            inputs.input.clone(),
+            input,
             value,
             inputs.scheme.into(),
             from,
@@ -612,23 +627,13 @@ where
         None
     }
 
-    fn call_end(
-        &mut self,
-        context: &mut EvmContext<DB>,
-        _inputs: &CallInputs,
-        outcome: CallOutcome,
-    ) -> CallOutcome {
-        self.fill_trace_on_call_end(context, &outcome.result, None);
-        outcome
+    fn call_end(&mut self, _: &mut CTX, _inputs: &CallInputs, outcome: &mut CallOutcome) {
+        self.fill_trace_on_call_end(&outcome.result, None);
     }
 
-    fn create(
-        &mut self,
-        context: &mut EvmContext<DB>,
-        inputs: &mut CreateInputs,
-    ) -> Option<CreateOutcome> {
-        let _ = context.load_account(inputs.caller);
-        let nonce = context.journaled_state.account(inputs.caller).info.nonce;
+    fn create(&mut self, context: &mut CTX, inputs: &mut CreateInputs) -> Option<CreateOutcome> {
+        let _ = context.journal().load_account(inputs.caller);
+        let nonce = context.journal().load_account(inputs.caller).ok()?.info.nonce;
         self.start_trace_on_call(
             context,
             inputs.created_address(nonce),
@@ -639,54 +644,16 @@ where
             inputs.gas_limit,
             Some(false),
         );
-
         None
     }
 
     fn create_end(
         &mut self,
-        context: &mut EvmContext<DB>,
+        _context: &mut CTX,
         _inputs: &CreateInputs,
-        outcome: CreateOutcome,
-    ) -> CreateOutcome {
-        self.fill_trace_on_call_end(context, &outcome.result, outcome.address);
-        outcome
-    }
-
-    fn eofcreate(
-        &mut self,
-        context: &mut EvmContext<DB>,
-        inputs: &mut EOFCreateInputs,
-    ) -> Option<CreateOutcome> {
-        let address = if let Some(address) = inputs.kind.created_address() {
-            *address
-        } else {
-            let _ = context.load_account(inputs.caller);
-            let nonce = context.journaled_state.account(inputs.caller).info.nonce;
-            inputs.caller.create(nonce)
-        };
-        self.start_trace_on_call(
-            context,
-            address,
-            Bytes::new(),
-            inputs.value,
-            CallKind::EOFCreate,
-            inputs.caller,
-            inputs.gas_limit,
-            Some(false),
-        );
-
-        None
-    }
-
-    fn eofcreate_end(
-        &mut self,
-        context: &mut EvmContext<DB>,
-        _inputs: &EOFCreateInputs,
-        outcome: CreateOutcome,
-    ) -> CreateOutcome {
-        self.fill_trace_on_call_end(context, &outcome.result, outcome.address);
-        outcome
+        outcome: &mut CreateOutcome,
+    ) {
+        self.fill_trace_on_call_end(&outcome.result, outcome.address);
     }
 
     fn selfdestruct(&mut self, contract: Address, target: Address, value: U256) {
@@ -759,5 +726,24 @@ impl From<alloy_rpc_types_eth::TransactionInfo> for TransactionContext {
             tx_index: tx_info.index.map(|idx| idx as usize),
             tx_hash: tx_info.hash,
         }
+    }
+}
+
+/// A helper extension trait that _clones_ the input data from the shared mem buffer
+pub(crate) trait CallInputExt {
+    fn input_data<CTX: ContextTr>(&self, ctx: &mut CTX) -> Bytes;
+}
+
+impl CallInputExt for CallInputs {
+    fn input_data<CTX: ContextTr>(&self, ctx: &mut CTX) -> Bytes {
+        let input_bytes = match &self.input {
+            CallInput::SharedBuffer(range) => ctx
+                .local()
+                .shared_memory_buffer_slice(range.clone())
+                .map(|slice| Bytes::from(slice.to_vec()))
+                .unwrap_or_default(),
+            CallInput::Bytes(bytes) => bytes.clone(),
+        };
+        input_bytes
     }
 }
