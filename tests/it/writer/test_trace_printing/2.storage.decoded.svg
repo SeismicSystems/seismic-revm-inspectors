@@ -21,7 +21,7 @@
 </tspan>
     <tspan x="10px" y="46px"><tspan>    ├─  storage changes:</tspan>
 </tspan>
-    <tspan x="10px" y="64px"><tspan>    │   @ 0: 0 → 1</tspan>
+    <tspan x="10px" y="64px"><tspan>    │   @ 0: 0, false → 1, false</tspan>
 </tspan>
     <tspan x="10px" y="82px"><tspan>    └─ </tspan><tspan class="fg-green">← [Return]</tspan>
 </tspan>

@@ -251,6 +251,7 @@ fn assert_traces(
         let path = base_path
             .join(format!("{name}{bytecodes_extra}{storage_changes_extra}{extra}.{extension}"));
         let data = snapbox::Data::read_from(&path, Some(file_kind));
+        println!("{}", s);
         assert_data_eq!(s, data);
     };
 

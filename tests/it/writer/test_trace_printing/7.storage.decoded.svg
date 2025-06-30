@@ -44,7 +44,7 @@
 </tspan>
     <tspan x="10px" y="244px"><tspan>    │   │   ├─  storage changes:</tspan>
 </tspan>
-    <tspan x="10px" y="262px"><tspan>    │   │   │   @ 0: 69 → 70</tspan>
+    <tspan x="10px" y="262px"><tspan>    │   │   │   @ 0: 69, false → 70, false</tspan>
 </tspan>
     <tspan x="10px" y="280px"><tspan>    │   │   └─ </tspan><tspan class="fg-green">← [Return]</tspan>
 </tspan>
@@ -52,7 +52,7 @@
 </tspan>
     <tspan x="10px" y="316px"><tspan>    ├─  storage changes:</tspan>
 </tspan>
-    <tspan x="10px" y="334px"><tspan>    │   @ 0: 70 → 71</tspan>
+    <tspan x="10px" y="334px"><tspan>    │   @ 0: 70, false → 71, false</tspan>
 </tspan>
     <tspan x="10px" y="352px"><tspan>    └─ </tspan><tspan class="fg-green">← [Return]</tspan>
 </tspan>

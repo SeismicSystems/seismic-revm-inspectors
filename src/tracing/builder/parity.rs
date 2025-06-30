@@ -379,7 +379,7 @@ impl ParityTraceBuilder {
     ) -> VmInstruction {
         let maybe_storage = step.storage_change.map(|storage_change| StorageDelta {
             key: storage_change.key,
-            val: storage_change.value,
+            val: storage_change.value.into(),
         });
 
         let maybe_memory = step
