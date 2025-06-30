@@ -1,21 +1,22 @@
 //! Geth trace builder
-
 use crate::tracing::{
     types::{CallTraceNode, CallTraceStepStackItem},
     utils::load_account_code,
 };
-use alloy_primitives::{Address, Bytes, B256, U256};
+use alloc::{
+    borrow::Cow,
+    collections::{BTreeMap, VecDeque},
+    vec::Vec,
+};
+use alloy_primitives::{map::HashMap, Address, Bytes, B256, U256};
 use alloy_rpc_types_trace::geth::{
     AccountChangeKind, AccountState, CallConfig, CallFrame, DefaultFrame, DiffMode,
     GethDefaultTracingOptions, PreStateConfig, PreStateFrame, PreStateMode, StructLog,
 };
 use revm::{
-    db::DatabaseRef,
-    primitives::{EvmState, ResultAndState},
-};
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, HashMap, VecDeque},
+    context_interface::result::{HaltReasonTr, ResultAndState},
+    state::EvmState,
+    DatabaseRef,
 };
 
 /// A type for creating geth style traces
@@ -96,7 +97,8 @@ impl<'a> GethTraceBuilder<'a> {
     /// Generate a geth-style trace e.g. for `debug_traceTransaction`
     ///
     /// This expects the gas used and return value for the
-    /// [ExecutionResult](revm::primitives::ExecutionResult) of the executed transaction.
+    /// [ExecutionResult](revm::context_interface::result::ExecutionResult) of the executed
+    /// transaction.
     pub fn geth_traces(
         &self,
         receipt_gas_used: u64,
@@ -111,7 +113,7 @@ impl<'a> GethTraceBuilder<'a> {
         let main_trace = &main_trace_node.trace;
 
         let mut struct_logs = Vec::new();
-        let mut storage = HashMap::new();
+        let mut storage = HashMap::default();
         self.fill_geth_trace(main_trace_node, &opts, &mut storage, &mut struct_logs);
 
         DefaultFrame {
@@ -128,7 +130,8 @@ impl<'a> GethTraceBuilder<'a> {
     /// This decodes all call frames from the recorded traces.
     ///
     /// This expects the gas used and return value for the
-    /// [ExecutionResult](revm::primitives::ExecutionResult) of the executed transaction.
+    /// [ExecutionResult](revm::context_interface::result::ExecutionResult) of the executed
+    /// transaction.
     pub fn geth_call_traces(&self, opts: CallConfig, gas_used: u64) -> CallFrame {
         if self.nodes.is_empty() {
             return Default::default();
@@ -216,7 +219,7 @@ impl<'a> GethTraceBuilder<'a> {
     /// * `db` - The database to fetch state pre-transaction execution.
     pub fn geth_prestate_traces<DB: DatabaseRef>(
         &self,
-        ResultAndState { state, .. }: &ResultAndState,
+        ResultAndState { state, .. }: &ResultAndState<impl HaltReasonTr>,
         prestate_config: &PreStateConfig,
         db: DB,
     ) -> Result<PreStateFrame, DB::Error> {
@@ -267,7 +270,8 @@ impl<'a> GethTraceBuilder<'a> {
     ) -> Result<PreStateFrame, DB::Error> {
         let account_diffs = state.iter().map(|(addr, acc)| (*addr, acc));
         let mut state_diff = DiffMode::default();
-        let mut account_change_kinds = HashMap::with_capacity(account_diffs.len());
+        let mut account_change_kinds =
+            HashMap::with_capacity_and_hasher(account_diffs.len(), Default::default());
         for (addr, changed_acc) in account_diffs {
             let db_acc = db.basic_ref(addr)?.unwrap_or_default();
 
