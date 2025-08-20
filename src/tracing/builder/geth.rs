@@ -252,17 +252,10 @@ impl<'a> GethTraceBuilder<'a> {
             // insert the original value of all modified storage slots if original_value.is_public(), else use 0
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter() {
-                    // acc_state.storage.insert((*key).into(), slot.original_value.into());
 
                     if slot.original_value.is_public() {
-                        // println!("slot.original_value.is_public() in pre mode, inserting into acc_state: {}", slot.original_value.is_public());
-                        acc_state.storage.insert((*key).into(), slot.original_value.into());
-                    } else {
-                        // print out the private storage slot
-                        println!("private storage slot key inserting anyway: {:?}", key);
                         acc_state.storage.insert((*key).into(), slot.original_value.into());
                     }
-
                     // Choosing to not even show the storage changes for private storage slots
                     // else {
                     //     acc_state.storage.insert((*key).into(), B256::ZERO);
@@ -306,21 +299,16 @@ impl<'a> GethTraceBuilder<'a> {
                 for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed())
                 {
 
-                    println!("slot.original_value.is_public() in diff mode: {}", slot.original_value.is_public());
-
-                    pre_state.storage.insert((*key).into(), slot.original_value.into());
-                    post_state.storage.insert((*key).into(), slot.present_value.into());
-
-                    // if slot.original_value.is_public() {
-                    //     pre_state.storage.insert((*key).into(), slot.original_value.into());
-                    // }
+                    if slot.original_value.is_public() {
+                        pre_state.storage.insert((*key).into(), slot.original_value.into());
+                    }
                     // else {
                     //     pre_state.storage.insert((*key).into(), B256::ZERO);
                     // }
 
-                    // if slot.present_value.is_public() {
-                    //     post_state.storage.insert((*key).into(), slot.present_value.into());
-                    // }
+                    if slot.present_value.is_public() {
+                        post_state.storage.insert((*key).into(), slot.present_value.into());
+                    }
                     // else {
                     //     post_state.storage.insert((*key).into(), B256::ZERO);
                     // }
