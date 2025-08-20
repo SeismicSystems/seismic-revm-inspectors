@@ -274,12 +274,17 @@ impl CallTraceNode {
 
     /// Converts this node into a parity `TransactionTrace`
     pub fn parity_transaction_trace(&self, trace_address: Vec<usize>) -> TransactionTrace {
+        self.parity_transaction_trace_with_masking(trace_address, false)
+    }
+
+    /// Converts this node into a parity `TransactionTrace` with optional data masking
+    pub fn parity_transaction_trace_with_masking(&self, trace_address: Vec<usize>, is_root_call: bool) -> TransactionTrace {
         let action = self.parity_action();
         let result = if self.trace.is_error() && !self.trace.is_revert() {
             // if the trace is a selfdestruct or an error that is not a revert, the result is None
             None
         } else {
-            Some(self.parity_trace_output())
+            Some(self.parity_trace_output_with_masking(is_root_call))
         };
         let error = self.trace.as_error_msg(TraceStyle::Parity);
         TransactionTrace { action, error, result, trace_address, subtraces: self.children.len() }
@@ -287,6 +292,11 @@ impl CallTraceNode {
 
     /// Returns the `Output` for a parity trace
     pub fn parity_trace_output(&self) -> TraceOutput {
+        self.parity_trace_output_with_masking(false)
+    }
+
+    /// Returns the `Output` for a parity trace with optional data masking
+    pub fn parity_trace_output_with_masking(&self, is_root_call: bool) -> TraceOutput {
         match self.kind() {
             CallKind::Call
             | CallKind::StaticCall
@@ -294,11 +304,21 @@ impl CallTraceNode {
             | CallKind::DelegateCall
             | CallKind::AuthCall => TraceOutput::Call(CallOutput {
                 gas_used: self.trace.gas_used,
-                output: self.trace.output.clone(),
+                // Mask output for nested calls (keep for root call)
+                output: if is_root_call {
+                    self.trace.output.clone()
+                } else {
+                    Bytes::new()
+                },
             }),
             CallKind::Create | CallKind::Create2 => TraceOutput::Create(CreateOutput {
                 gas_used: self.trace.gas_used,
-                code: self.trace.output.clone(),
+                // Mask code for nested calls (keep for root call)
+                code: if is_root_call {
+                    self.trace.output.clone()
+                } else {
+                    Bytes::new()
+                },
                 address: self.trace.address,
             }),
         }
@@ -353,7 +373,8 @@ impl CallTraceNode {
                 to: self.trace.address,
                 value: self.trace.value,
                 gas: self.trace.gas_limit,
-                input: self.trace.data.clone(),
+                input: Bytes::new(),
+                // input: self.trace.data.clone(),
                 call_type: self.kind().into(),
                 // tx_type: self.trace.tx_type,
             }),
@@ -361,7 +382,8 @@ impl CallTraceNode {
                 from: self.trace.caller,
                 value: self.trace.value,
                 gas: self.trace.gas_limit,
-                init: self.trace.data.clone(),
+                init: Bytes::new(),
+                // init: self.trace.data.clone(),
                 creation_method: self.kind().into(),
             }),
         }

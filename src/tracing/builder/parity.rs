@@ -122,7 +122,16 @@ impl ParityTraceBuilder {
         self,
         info: TransactionInfo,
     ) -> impl Iterator<Item = LocalizedTransactionTrace> {
-        self.into_transaction_traces_iter().map(move |trace| {
+        self.into_localized_transaction_traces_iter_with_masking(info, true)
+    }
+
+    /// Returns an iterator over all recorded traces  for `trace_transaction` with masking
+    pub fn into_localized_transaction_traces_iter_with_masking(
+        self,
+        info: TransactionInfo,
+        mask_outputs: bool,
+    ) -> impl Iterator<Item = LocalizedTransactionTrace> {
+        self.into_transaction_traces_iter_with_masking(mask_outputs).map(move |trace| {
             let TransactionInfo { hash, index, block_hash, block_number, .. } = info;
             LocalizedTransactionTrace {
                 trace,
@@ -140,6 +149,15 @@ impl ParityTraceBuilder {
         info: TransactionInfo,
     ) -> Vec<LocalizedTransactionTrace> {
         self.into_localized_transaction_traces_iter(info).collect()
+    }
+
+    /// Returns all recorded traces for `trace_transaction` with masking
+    pub fn into_localized_transaction_traces_with_masking(
+        self,
+        info: TransactionInfo,
+        mask_outputs: bool,
+    ) -> Vec<LocalizedTransactionTrace> {
+        self.into_localized_transaction_traces_iter_with_masking(info, mask_outputs).collect()
     }
 
     /// Consumes the inspector and returns the trace results according to the configured trace
@@ -236,13 +254,18 @@ impl ParityTraceBuilder {
     /// Selfdestructs appear as individual [`TransactionTrace`] instance but selfdestructs are
     /// tracked as metadata of the recorded nodes.
     fn transaction_traces(&self) -> Vec<TransactionTrace> {
+        self.transaction_traces_with_masking(false)
+    }
+
+    fn transaction_traces_with_masking(&self, is_root_call: bool) -> Vec<TransactionTrace> {
         let mut traces = Vec::with_capacity(self.nodes.len());
         // Boolean marker to track if sorting for selfdestruct is needed
         let mut sorting_selfdestruct = false;
 
-        for node in self.iter_traceable_nodes() {
+        for (index, node) in self.iter_traceable_nodes().enumerate() {
             let trace_address = self.trace_address(node.idx);
-            let trace = node.parity_transaction_trace(trace_address);
+            // Only the first trace (root call) gets the is_root_call flag
+            let trace = node.parity_transaction_trace_with_masking(trace_address, is_root_call && index == 0);
             traces.push(trace);
 
             if node.is_selfdestruct() {
@@ -274,6 +297,11 @@ impl ParityTraceBuilder {
 
     /// Returns an iterator over all recorded traces  for `trace_transaction`
     pub fn into_transaction_traces_iter(self) -> impl Iterator<Item = TransactionTrace> {
+        self.into_transaction_traces_iter_with_masking(false)
+    }
+
+    /// Returns an iterator over all recorded traces  for `trace_transaction` with masking
+    pub fn into_transaction_traces_iter_with_masking(self, mask_outputs: bool) -> impl Iterator<Item = TransactionTrace> {
         let trace_addresses = self.trace_addresses();
         TransactionTraceIter {
             next_selfdestructs: Default::default(),
@@ -281,8 +309,13 @@ impl ParityTraceBuilder {
                 .nodes
                 .into_iter()
                 .zip(trace_addresses)
-                .filter(|(node, _)| !node.is_precompile())
-                .map(|(node, trace_address)| (node.parity_transaction_trace(trace_address), node))
+                .enumerate()
+                .filter(|(_, (node, _))| !node.is_precompile())
+                .map(move |(index, (node, trace_address))| {
+                    // Only the first trace (root call) gets the is_root_call flag when mask_outputs is true
+                    let is_root_call = mask_outputs && index == 0;
+                    (node.parity_transaction_trace_with_masking(trace_address, is_root_call), node)
+                })
                 .peekable(),
         }
     }
