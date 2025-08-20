@@ -356,20 +356,20 @@ impl JsInspector {
 
     /// Returns true whether the active call is the root call.
     #[inline]
-    fn is_root_call_active(&self) -> bool {
+    fn shield_output_active(&self) -> bool {
         self.call_stack.len() == 1
     }
 
     /// Returns true if there's an enter function and the active call is not the root call.
     #[inline]
     fn can_call_enter(&self) -> bool {
-        self.enter_fn.is_some() && !self.is_root_call_active()
+        self.enter_fn.is_some() && !self.shield_output_active()
     }
 
     /// Returns true if there's an exit function and the active call is not the root call.
     #[inline]
     fn can_call_exit(&mut self) -> bool {
-        self.exit_fn.is_some() && !self.is_root_call_active()
+        self.exit_fn.is_some() && !self.shield_output_active()
     }
 
     /// Pushes a new call to the stack
