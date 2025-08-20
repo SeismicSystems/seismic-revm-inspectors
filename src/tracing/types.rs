@@ -381,12 +381,8 @@ impl CallTraceNode {
             value: Some(self.trace.value),
             gas: U256::from(self.trace.gas_limit),
             gas_used: U256::from(self.trace.gas_used),
-            // Mask input for nested calls (keep for root call for now but might need to zero out also)
-            input: if is_root_call {
-                self.trace.data.clone()
-            } else {
-                Bytes::new()
-            },
+            // Mask input for nested calls
+            input: Bytes::new(),
             // Mask output for nested calls (keep for root call)
             output: if is_root_call {
                 (!self.trace.output.is_empty()).then(|| self.trace.output.clone())
