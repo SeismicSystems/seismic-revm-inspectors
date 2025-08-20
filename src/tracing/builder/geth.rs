@@ -133,10 +133,7 @@ impl<'a> GethTraceBuilder<'a> {
     /// [ExecutionResult](revm::context_interface::result::ExecutionResult) of the executed
     /// transaction.
     pub fn geth_call_traces(&self, opts: CallConfig, gas_used: u64) -> CallFrame {
-
-        return Default::default();
-
-
+        
         if self.nodes.is_empty() {
             return Default::default();
         }
