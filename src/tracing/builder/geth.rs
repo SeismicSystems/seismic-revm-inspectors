@@ -140,7 +140,7 @@ impl<'a> GethTraceBuilder<'a> {
         let include_logs = opts.with_log.unwrap_or_default();
         // first fill up the root
         let main_trace_node = &self.nodes[0];
-        let mut root_call_frame = main_trace_node.geth_empty_call_frame(include_logs);
+        let mut root_call_frame = main_trace_node.geth_empty_call_frame_with_masking(include_logs, true);
         root_call_frame.gas_used = U256::from(gas_used);
 
         // selfdestructs are not recorded as individual call traces but are derived from
@@ -162,7 +162,7 @@ impl<'a> GethTraceBuilder<'a> {
         for (idx, trace) in self.nodes.iter().enumerate().skip(1) {
             // include logs only if call and all its parents were successful
             let include_logs = include_logs && !self.call_or_parent_failed(trace);
-            call_frames.push((idx, trace.geth_empty_call_frame(include_logs)));
+            call_frames.push((idx, trace.geth_empty_call_frame_with_masking(include_logs, false)));
 
             // selfdestructs are not recorded as individual call traces but are derived from
             // the call trace and are added as additional `CallFrame` objects
