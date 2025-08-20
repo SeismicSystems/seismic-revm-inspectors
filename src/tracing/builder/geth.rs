@@ -259,7 +259,8 @@ impl<'a> GethTraceBuilder<'a> {
                         acc_state.storage.insert((*key).into(), slot.original_value.into());
                     } else {
                         // print out the private storage slot
-                        println!("private storage slot key: {:?}", key);
+                        println!("private storage slot key inserting anyway: {:?}", key);
+                        acc_state.storage.insert((*key).into(), slot.original_value.into());
                     }
 
                     // Choosing to not even show the storage changes for private storage slots
