@@ -255,9 +255,12 @@ impl<'a> GethTraceBuilder<'a> {
                     // acc_state.storage.insert((*key).into(), slot.original_value.into());
 
                     if slot.original_value.is_public() {
-                        println!("slot.original_value.is_public() in pre mode, inserting into acc_state: {}", slot.original_value.is_public());
+                        // println!("slot.original_value.is_public() in pre mode, inserting into acc_state: {}", slot.original_value.is_public());
                         acc_state.storage.insert((*key).into(), slot.original_value.into());
-                    } 
+                    } else {
+                        // print out the private storage slot
+                        println!("private storage slot key: {:?}", key);
+                    }
 
                     // Choosing to not even show the storage changes for private storage slots
                     // else {
