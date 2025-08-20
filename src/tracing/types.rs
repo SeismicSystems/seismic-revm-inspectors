@@ -443,6 +443,8 @@ impl CallTraceNode {
                 .collect();
         }
 
+        // println!("call_frame: {:?}", call_frame);
+
         call_frame
     }
 }
