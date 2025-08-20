@@ -252,6 +252,8 @@ impl<'a> GethTraceBuilder<'a> {
             // insert the original value of all modified storage slots if original_value.is_public(), else use 0
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter() {
+
+                    println!("slot.original_value.is_public() in pre mode: {}", slot.original_value.is_public());
                     acc_state.storage.insert((*key).into(), slot.original_value.into());
 
                     // if slot.original_value.is_public() {
@@ -300,6 +302,8 @@ impl<'a> GethTraceBuilder<'a> {
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed())
                 {
+
+                    println!("slot.original_value.is_public() in diff mode: {}", slot.original_value.is_public());
 
                     pre_state.storage.insert((*key).into(), slot.original_value.into());
                     post_state.storage.insert((*key).into(), slot.present_value.into());
