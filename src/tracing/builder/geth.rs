@@ -249,10 +249,14 @@ impl<'a> GethTraceBuilder<'a> {
             let code = code_enabled.then(|| load_account_code(&db, &db_acc)).flatten();
             let mut acc_state = AccountState::from_account_info(db_acc.nonce, db_acc.balance, code);
 
-            // insert the original value of all modified storage slots
+            // insert the original value of all modified storage slots if original_value.is_public(), else use 0
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter() {
-                    acc_state.storage.insert((*key).into(), slot.original_value.into());
+                    if slot.original_value.is_public() {
+                        acc_state.storage.insert((*key).into(), slot.original_value.into());
+                    } else {
+                        acc_state.storage.insert((*key).into(), B256::ZERO);
+                    }
                 }
             }
 
@@ -291,8 +295,17 @@ impl<'a> GethTraceBuilder<'a> {
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed())
                 {
-                    pre_state.storage.insert((*key).into(), slot.original_value.into());
-                    post_state.storage.insert((*key).into(), slot.present_value.into());
+                    if slot.original_value.is_public() {
+                        pre_state.storage.insert((*key).into(), slot.original_value.into());
+                    } else {
+                        pre_state.storage.insert((*key).into(), B256::ZERO);
+                    }
+                    
+                    if slot.present_value.is_public() {
+                        post_state.storage.insert((*key).into(), slot.present_value.into());
+                    } else {
+                        post_state.storage.insert((*key).into(), B256::ZERO);
+                    }
                 }
             }
 
