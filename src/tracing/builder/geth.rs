@@ -254,9 +254,12 @@ impl<'a> GethTraceBuilder<'a> {
                 for (key, slot) in changed_acc.storage.iter() {
                     if slot.original_value.is_public() {
                         acc_state.storage.insert((*key).into(), slot.original_value.into());
-                    } else {
-                        acc_state.storage.insert((*key).into(), B256::ZERO);
-                    }
+                    } 
+
+                    // Choosing to not even show the storage changes for private storage slots
+                    // else {
+                    //     acc_state.storage.insert((*key).into(), B256::ZERO);
+                    // }
                 }
             }
 
@@ -297,15 +300,17 @@ impl<'a> GethTraceBuilder<'a> {
                 {
                     if slot.original_value.is_public() {
                         pre_state.storage.insert((*key).into(), slot.original_value.into());
-                    } else {
-                        pre_state.storage.insert((*key).into(), B256::ZERO);
                     }
-                    
+                    // else {
+                    //     pre_state.storage.insert((*key).into(), B256::ZERO);
+                    // }
+
                     if slot.present_value.is_public() {
                         post_state.storage.insert((*key).into(), slot.present_value.into());
-                    } else {
-                        post_state.storage.insert((*key).into(), B256::ZERO);
                     }
+                    // else {
+                    //     post_state.storage.insert((*key).into(), B256::ZERO);
+                    // }
                 }
             }
 
