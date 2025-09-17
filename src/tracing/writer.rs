@@ -9,6 +9,7 @@ use alloc::{format, string::String, vec::Vec};
 use alloy_primitives::{address, hex, map::HashMap, Address, B256, U256};
 use anstyle::{AnsiColor, Color, Style};
 use colorchoice::ColorChoice;
+use revm::interpreter::InstructionResult;
 use std::io::{self, Write};
 
 const CHEATCODE_ADDRESS: Address = address!("7109709ECfa91a80626fF3989D68f67F5b1DD12D");
@@ -264,13 +265,13 @@ impl<W: Write> TraceWriter<W> {
             write!(
                 self.writer,
                 "{trace_kind_style}{CALL}new{trace_kind_style:#} {label}@{address}",
-                label = trace.decoded.label.as_deref().unwrap_or("<unknown>")
+                label = trace.decoded_label("<unknown>")
             )?;
             if self.config.write_bytecodes {
                 write!(self.writer, "({})", trace.data)?;
             }
         } else {
-            let (func_name, inputs) = match &trace.decoded.call_data {
+            let (func_name, inputs) = match trace.decoded_call_data() {
                 Some(DecodedCallData { signature, args }) => {
                     let name = signature.split('(').next().unwrap();
                     (name.to_string(), args.join(", "))
@@ -289,7 +290,7 @@ impl<W: Write> TraceWriter<W> {
                 self.writer,
                 "{style}{addr}{style:#}::{style}{func_name}{style:#}",
                 style = self.trace_style(trace),
-                addr = trace.decoded.label.as_deref().unwrap_or(address.as_str()),
+                addr = trace.decoded_label(address.as_str()),
             )?;
 
             if !trace.value.is_zero() {
@@ -318,9 +319,9 @@ impl<W: Write> TraceWriter<W> {
         let log_style = self.log_style();
         self.write_branch()?;
 
-        if let Some(name) = &log.decoded.name {
+        if let Some(name) = log.decoded_name() {
             write!(self.writer, "emit {name}({log_style}")?;
-            if let Some(params) = &log.decoded.params {
+            if let Some(params) = log.decoded_params() {
                 for (i, (param_name, value)) in params.iter().enumerate() {
                     if i > 0 {
                         self.writer.write_all(b", ")?;
@@ -370,7 +371,7 @@ impl<W: Write> TraceWriter<W> {
             return Ok(item_idx + 1);
         };
 
-        match decoded {
+        match &**decoded {
             DecodedTraceStep::InternalCall(call, end_idx) => {
                 let gas_used = node.trace.steps[*end_idx].gas_used.saturating_sub(step.gas_used);
 
@@ -418,15 +419,17 @@ impl<W: Write> TraceWriter<W> {
             self.writer,
             "{style}{RETURN}[{status:?}]{style:#}",
             style = self.trace_style(trace),
-            status = trace.status,
+            status = trace.status.unwrap_or(InstructionResult::Stop),
         )?;
 
-        if let Some(decoded) = &trace.decoded.return_data {
+        if let Some(decoded) = trace.decoded_return_data() {
             write!(self.writer, " ")?;
             return self.writer.write_all(decoded.as_bytes());
         }
 
-        if !self.config.write_bytecodes && (trace.kind.is_any_create() && trace.status.is_ok()) {
+        if !self.config.write_bytecodes
+            && (trace.kind.is_any_create() && trace.status.is_none_or(|status| status.is_ok()))
+        {
             write!(self.writer, " {} bytes of code", trace.output.len())?;
         } else if !trace.output.is_empty() {
             write!(self.writer, " {}", trace.output)?;
