@@ -202,7 +202,7 @@ impl TracingInspector {
     }
 
     /// Manually set the transaction type of the root trace.
-    pub fn set_transaction_type(&mut self, tx_type_opt: Option<isize>) {
+    pub fn set_transaction_type(&mut self, tx_type_opt: Option<usize>) {
         if let Some(tx_type) = tx_type_opt {
             if let Some(node) = self.traces.arena.first_mut() {
                 node.trace.tx_type = tx_type;
@@ -213,7 +213,7 @@ impl TracingInspector {
     /// Convenience function for [TracingInspector::set_transaction_type] that consumes the
     /// type.
     #[inline]
-    pub fn with_transaction_type(mut self, tx_type_opt: Option<isize>) -> Self {
+    pub fn with_transaction_type(mut self, tx_type_opt: Option<usize>) -> Self {
         self.set_transaction_type(tx_type_opt);
         self
     }
