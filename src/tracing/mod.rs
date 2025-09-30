@@ -10,18 +10,16 @@ use crate::{
     },
 };
 use alloc::vec::Vec;
-use core::borrow::Borrow;
+use core::{borrow::Borrow, mem};
 use revm::{
     bytecode::opcode::{self, OpCode},
     context::{JournalTr, LocalContextTr},
     context_interface::ContextTr,
     inspector::JournalExt,
     interpreter::{
-        interpreter_types::{
-            Immediates, InputsTr, Jumps, LoopControl, ReturnData, RuntimeFlag, SubRoutineStack,
-        },
-        CallInput, CallInputs, CallOutcome, CallScheme, CreateInputs, CreateOutcome,
-        InstructionResult, Interpreter, InterpreterResult,
+        interpreter_types::{Immediates, InputsTr, Jumps, LoopControl, ReturnData, RuntimeFlag},
+        CallInput, CallInputs, CallOutcome, CallScheme, CreateInputs, CreateOutcome, Interpreter,
+        InterpreterResult,
     },
     primitives::{hardfork::SpecId, Address, Bytes, Log, B256, U256},
     Inspector, JournalEntry,
@@ -87,6 +85,10 @@ pub struct TracingInspector {
     ///
     /// This is filled during execution.
     spec_id: Option<SpecId>,
+    /// Pool of reusable _empty_ step vectors to reduce allocations.
+    ///
+    /// All `Vec<CallTraceStep>` are always empty but may have capacity.
+    reusable_step_vecs: Vec<Vec<CallTraceStep>>,
 }
 
 // === impl TracingInspector ===
@@ -111,8 +113,21 @@ impl TracingInspector {
             last_journal_len,
             spec_id,
             // kept
-            config: _,
+            config,
+            reusable_step_vecs,
         } = self;
+
+        // if we record steps we can reuse the individual calltracestep vecs
+        if config.record_steps {
+            for node in &mut traces.arena {
+                // move out and store the reusable steps vec
+                let mut steps = mem::take(&mut node.trace.steps);
+                // ensure steps are cleared
+                steps.clear();
+                reusable_step_vecs.push(steps);
+            }
+        }
+
         traces.clear();
         trace_stack.clear();
         step_stack.clear();
@@ -340,6 +355,9 @@ impl TracingInspector {
             PushTraceKind::PushAndAttachToParent
         };
 
+        // find an empty steps vec or create a new one
+        let steps = self.reusable_step_vecs.pop().unwrap_or_default();
+
         self.trace_stack.push(self.traces.push_trace(
             0,
             push_kind,
@@ -349,10 +367,11 @@ impl TracingInspector {
                 kind,
                 data: input_data,
                 value,
-                status: InstructionResult::Continue,
+                status: None,
                 caller,
                 maybe_precompile,
                 gas_limit,
+                steps,
                 ..Default::default()
             },
         ));
@@ -377,8 +396,8 @@ impl TracingInspector {
 
         trace.gas_used = gas.spent();
 
-        trace.status = result;
-        trace.success = trace.status.is_ok();
+        trace.status = Some(result);
+        trace.success = trace.status.is_some_and(|status| status.is_ok());
         trace.output = output.clone();
 
         self.last_call_return_data = Some(output.clone());
@@ -450,8 +469,8 @@ impl TracingInspector {
 
         let gas_used = gas_used(
             interp.runtime_flag.spec_id(),
-            interp.control.gas.spent(),
-            interp.control.gas.refunded() as u64,
+            interp.gas.spent(),
+            interp.gas.refunded() as u64,
         );
 
         let mut immediate_bytes = None;
@@ -468,15 +487,14 @@ impl TracingInspector {
         trace.trace.steps.push(CallTraceStep {
             depth: context.journal().depth() as u64,
             pc: interp.bytecode.pc(),
-            code_section_idx: interp.sub_routine.routine_idx(),
             op,
             contract: interp.input.target_address(),
             stack,
             push_stack: None,
             memory,
             returndata,
-            gas_remaining: interp.control.gas().remaining(),
-            gas_refund_counter: interp.control.gas().refunded() as u64,
+            gas_remaining: interp.gas.remaining(),
+            gas_refund_counter: interp.gas.refunded() as u64,
             gas_used,
             decoded: None,
             immediate_bytes,
@@ -484,7 +502,7 @@ impl TracingInspector {
             // fields will be populated end of call
             gas_cost: 0,
             storage_change: None,
-            status: InstructionResult::Continue,
+            status: None,
         });
 
         trace.ordering.push(TraceMemberOrder::Step(step_idx));
@@ -552,10 +570,10 @@ impl TracingInspector {
         // The gas cost is the difference between the recorded gas remaining at the start of the
         // step the remaining gas here, at the end of the step.
         // TODO: Figure out why this can overflow. https://github.com/paradigmxyz/revm-inspectors/pull/38
-        step.gas_cost = step.gas_remaining.saturating_sub(interp.control.gas().remaining());
+        step.gas_cost = step.gas_remaining.saturating_sub(interp.gas.remaining());
 
         // set the status
-        step.status = interp.control.instruction_result();
+        step.status = interp.bytecode.action().as_ref().and_then(|i| i.instruction_result())
     }
 }
 
@@ -581,30 +599,29 @@ where
         if self.config.record_logs {
             let trace = self.last_trace();
             trace.ordering.push(TraceMemberOrder::Log(trace.logs.len()));
-            trace.logs.push(CallLog::from(log.clone()).with_position(trace.children.len() as u64));
+            trace.logs.push(CallLog::from(log).with_position(trace.children.len() as u64));
         }
     }
 
     fn call(&mut self, context: &mut CTX, inputs: &mut CallInputs) -> Option<CallOutcome> {
         // determine correct `from` and `to` based on the call scheme
         let (from, to) = match inputs.scheme {
-            CallScheme::DelegateCall | CallScheme::CallCode | CallScheme::ExtDelegateCall => {
+            CallScheme::DelegateCall | CallScheme::CallCode => {
                 (inputs.target_address, inputs.bytecode_address)
             }
             _ => (inputs.caller, inputs.target_address),
         };
 
-        let value =
-            if matches!(inputs.scheme, CallScheme::DelegateCall | CallScheme::ExtDelegateCall) {
-                // for delegate calls we need to use the value of the top trace
-                if let Some(parent) = self.active_trace() {
-                    parent.trace.value
-                } else {
-                    inputs.call_value()
-                }
+        let value = if matches!(inputs.scheme, CallScheme::DelegateCall) {
+            // for delegate calls we need to use the value of the top trace
+            if let Some(parent) = self.active_trace() {
+                parent.trace.value
             } else {
                 inputs.call_value()
-            };
+            }
+        } else {
+            inputs.call_value()
+        };
 
         // if calls to precompiles should be excluded, check whether this is a call to a precompile
         let maybe_precompile = self
@@ -632,8 +649,7 @@ where
     }
 
     fn create(&mut self, context: &mut CTX, inputs: &mut CreateInputs) -> Option<CreateOutcome> {
-        let _ = context.journal().load_account(inputs.caller);
-        let nonce = context.journal().load_account(inputs.caller).ok()?.info.nonce;
+        let nonce = context.journal_mut().load_account(inputs.caller).ok()?.info.nonce;
         self.start_trace_on_call(
             context,
             inputs.created_address(nonce),

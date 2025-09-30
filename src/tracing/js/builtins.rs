@@ -1,6 +1,6 @@
 //! Builtin functions
 
-use alloc::{format, string::ToString, vec::Vec};
+use alloc::{borrow::Cow, format, string::ToString, vec::Vec};
 use alloy_primitives::{hex, map::HashSet, Address, FixedBytes, B256, U256};
 use boa_engine::{
     builtins::{array_buffer::ArrayBuffer, typed_array::TypedArray},
@@ -11,9 +11,6 @@ use boa_engine::{
 };
 use boa_gc::{empty_trace, Finalize, Trace};
 use core::borrow::Borrow;
-
-/// bigIntegerJS is the minified version of <https://github.com/peterolson/BigInteger.js>.
-pub(crate) const BIG_INT_JS: &str = include_str!("bigint.js");
 
 /// Converts the given `JsValue` to a `serde_json::Value`.
 ///
@@ -57,12 +54,17 @@ pub(crate) fn json_stringify(val: JsValue, ctx: &mut Context) -> JsResult<JsStri
     res.to_string(ctx)
 }
 
-/// Registers all the builtin functions and global bigint property.
+/// Registers all the builtin functions.
 ///
 /// Note: this does not register the `isPrecompiled` builtin, as this requires the precompile
 /// addresses, see [PrecompileList::register_callable].
 pub(crate) fn register_builtins(ctx: &mut Context) -> JsResult<()> {
-    let big_int = ctx.eval(Source::from_bytes(BIG_INT_JS))?;
+    let big_int = ctx.global_object().get(js_string!("BigInt"), ctx)?;
+    // Add toJSON method to BigInt prototype for JSON serialization support
+    ctx.eval(Source::from_bytes(
+        b"BigInt.prototype.toJSON = function() { return this.toString(); }",
+    ))?;
+    // Create global 'bigint' alias for native BigInt constructor (lowercase for compatibility)
     ctx.register_global_property(js_string!("bigint"), big_int, Attribute::all())?;
     ctx.register_global_builtin_callable(
         js_string!("toHex"),
@@ -187,7 +189,7 @@ pub(crate) fn bytes_to_fb<const N: usize>(mut bytes: &[u8]) -> FixedBytes<N> {
     FixedBytes::left_padding_from(bytes)
 }
 
-/// Converts a U256 to a bigint using the global bigint property.
+/// Converts a U256 to a bigint using the global bigint alias.
 pub(crate) fn to_bigint(value: U256, ctx: &mut Context) -> JsResult<JsValue> {
     let bigint = ctx.global_object().get(js_string!("bigint"), ctx)?;
     let Some(bigint) = bigint.as_callable() else { return Ok(JsValue::undefined()) };
@@ -282,12 +284,22 @@ pub(crate) fn to_hex(_: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResu
 /// Decodes a hex decoded js-string
 fn hex_decode_js_string(js_string: &JsString) -> JsResult<Vec<u8>> {
     match js_string.to_std_string() {
-        Ok(s) => match hex::decode(s.as_str()) {
-            Ok(data) => Ok(data),
-            Err(err) => Err(JsError::from_native(
-                JsNativeError::error().with_message(format!("invalid hex string {s}: {err}",)),
-            )),
-        },
+        Ok(s) => {
+            // hex decoding strings is pretty relaxed in geth reference implementation, which allows uneven hex values <https://github.com/ethereum/go-ethereum/blob/355228b011ef9a85ebc0f21e7196f892038d49f0/common/bytes.go#L33-L35>
+            // <https://github.com/paradigmxyz/reth/issues/16289>
+            let mut s = Cow::Borrowed(s.strip_prefix("0x").unwrap_or(s.as_str()));
+            if s.as_ref().len() % 2 == 1 {
+                s = Cow::Owned(format!("0{s}"));
+            }
+
+            match hex::decode(s.as_ref()) {
+                Ok(data) => Ok(data),
+                Err(err) => Err(JsError::from_native(
+                    JsNativeError::error()
+                        .with_message(format!("invalid hex string: \"{s}\": {err}",)),
+                )),
+            }
+        }
         Err(err) => Err(JsError::from_native(
             JsNativeError::error()
                 .with_message(format!("invalid utf8 string {js_string:?}: {err}",)),
@@ -331,11 +343,58 @@ mod tests {
     #[test]
     fn test_install_bigint() {
         let mut ctx = Context::default();
-        let big_int = ctx.eval(Source::from_bytes(BIG_INT_JS.as_bytes())).unwrap();
-        let value = JsValue::from(100);
+        register_builtins(&mut ctx).unwrap();
+
+        // Test that 'bigint' alias exists and works
+        let bigint = ctx.global_object().get(js_string!("bigint"), &mut ctx).unwrap();
+        assert!(bigint.is_callable());
+
+        let value = JsValue::from(js_string!("100"));
         let result =
-            big_int.as_callable().unwrap().call(&JsValue::undefined(), &[value], &mut ctx).unwrap();
+            bigint.as_callable().unwrap().call(&JsValue::undefined(), &[value], &mut ctx).unwrap();
+        assert!(result.is_bigint());
         assert_eq!(result.to_string(&mut ctx).unwrap().to_std_string().unwrap(), "100");
+    }
+
+    #[test]
+    fn test_to_bigint_function() {
+        let mut ctx = Context::default();
+        register_builtins(&mut ctx).unwrap();
+
+        // Test various U256 values through to_bigint
+        let test_cases = vec![
+            (U256::ZERO, "0"),
+            (U256::from(1u64), "1"),
+            (U256::from(42u64), "42"),
+            (U256::from(u64::MAX), "18446744073709551615"),
+            (
+                U256::from_str_radix("123456789012345678901234567890", 10).unwrap(),
+                "123456789012345678901234567890",
+            ),
+        ];
+
+        for (value, expected) in test_cases {
+            let result = to_bigint(value, &mut ctx).unwrap();
+            assert!(result.is_bigint(), "Result should be a bigint for value {value}");
+            let result_str = result.to_string(&mut ctx).unwrap().to_std_string().unwrap();
+            assert_eq!(result_str, expected, "BigInt conversion failed for {value}");
+        }
+
+        // Test that the result can be used in JavaScript operations
+        let big_value = U256::from(999u64);
+        let bigint_result = to_bigint(big_value, &mut ctx).unwrap();
+
+        // Set it as a global variable
+        ctx.global_object().set(js_string!("testBigInt"), bigint_result, false, &mut ctx).unwrap();
+
+        // Test arithmetic with it
+        let arithmetic_test = ctx.eval(Source::from_bytes(b"testBigInt + BigInt(1)")).unwrap();
+        assert!(arithmetic_test.is_bigint());
+        assert_eq!(arithmetic_test.to_string(&mut ctx).unwrap().to_std_string().unwrap(), "1000");
+
+        // Test comparison
+        let comparison_test = ctx.eval(Source::from_bytes(b"testBigInt > BigInt(500)")).unwrap();
+        assert!(comparison_test.as_boolean().unwrap());
     }
 
     fn as_length<T>(array: T) -> usize
@@ -377,6 +436,18 @@ mod tests {
         assert_eq!(
             result.to_string(&mut ctx).unwrap().to_std_string().unwrap(),
             "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,222,173,190,239"
+        );
+    }
+
+    #[test]
+    fn test_to_word_digit_string() {
+        let mut ctx = Context::default();
+        let value = JsValue::from(js_string!("1"));
+        let result = to_word(&JsValue::undefined(), &[value], &mut ctx).unwrap();
+        assert_eq!(as_length(&result), 32);
+        assert_eq!(
+            result.to_string(&mut ctx).unwrap().to_std_string().unwrap(),
+            "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1"
         );
     }
 

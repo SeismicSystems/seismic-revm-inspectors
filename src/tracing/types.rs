@@ -2,6 +2,7 @@
 
 use crate::tracing::{config::TraceStyle, utils, utils::convert_memory};
 use alloc::{
+    boxed::Box,
     collections::VecDeque,
     format,
     string::{String, ToString},
@@ -92,26 +93,29 @@ pub struct CallTrace {
     /// The gas limit of the call.
     pub gas_limit: u64,
     /// The final status of the call.
-    pub status: InstructionResult,
+    pub status: Option<InstructionResult>,
     /// Opcode-level execution steps.
     pub steps: Vec<CallTraceStep>,
-    /// Optional complementary decoded call data.
-    pub decoded: DecodedCallTrace,
     /// The type of transaction
     pub tx_type: isize,
+    /// Optional complementary decoded call data.
+    pub decoded: Option<Box<DecodedCallTrace>>,
 }
 
 impl CallTrace {
     /// Returns true if the status code is an error or revert, See [InstructionResult::Revert]
     #[inline]
     pub const fn is_error(&self) -> bool {
-        !self.status.is_ok()
+        let Some(status) = self.status else {
+            return false;
+        };
+        !status.is_ok()
     }
 
     /// Returns true if the status code is a revert.
     #[inline]
     pub fn is_revert(&self) -> bool {
-        self.status == InstructionResult::Revert
+        self.status.is_some_and(|status| status == InstructionResult::Revert)
     }
 
     /// Returns `true` if this trace was a selfdestruct.
@@ -126,13 +130,32 @@ impl CallTrace {
     /// `selfdestruct` inspector function will not be called after the Cancun hardfork.
     #[inline]
     pub const fn is_selfdestruct(&self) -> bool {
-        matches!(self.status, InstructionResult::SelfDestruct)
+        matches!(self.status, Some(InstructionResult::SelfDestruct))
             || self.selfdestruct_refund_target.is_some()
     }
 
     /// Returns the error message if it is an erroneous result.
     pub(crate) fn as_error_msg(&self, kind: TraceStyle) -> Option<String> {
-        utils::fmt_error_msg(self.status, kind)
+        self.status.and_then(|status| utils::fmt_error_msg(status, kind))
+    }
+
+    /// Gets the decoded call trace.
+    ///
+    /// Initializes with the default value if not yet set.
+    pub fn decoded(&mut self) -> &mut DecodedCallTrace {
+        self.decoded.get_or_insert_with(Default::default)
+    }
+
+    pub(crate) fn decoded_label<'a>(&'a self, fallback: &'a str) -> &'a str {
+        self.decoded.as_ref().and_then(|d| d.label.as_deref()).unwrap_or(fallback)
+    }
+
+    pub(crate) fn decoded_call_data(&self) -> Option<&DecodedCallData> {
+        self.decoded.as_ref()?.call_data.as_ref()
+    }
+
+    pub(crate) fn decoded_return_data(&self) -> Option<&str> {
+        self.decoded.as_ref()?.return_data.as_deref()
     }
 }
 
@@ -154,7 +177,7 @@ pub struct CallLog {
     /// The raw log data.
     pub raw_log: LogData,
     /// Optional complementary decoded log data.
-    pub decoded: DecodedCallLog,
+    pub decoded: Option<Box<DecodedCallLog>>,
     /// The position of the log relative to subcalls within the same trace.
     pub position: u64,
 }
@@ -162,11 +185,7 @@ pub struct CallLog {
 impl From<Log> for CallLog {
     /// Converts a [`Log`] into a [`CallLog`].
     fn from(log: Log) -> Self {
-        Self {
-            position: Default::default(),
-            raw_log: log.data,
-            decoded: DecodedCallLog { name: None, params: None },
-        }
+        Self { position: Default::default(), raw_log: log.data, decoded: None }
     }
 }
 
@@ -176,6 +195,21 @@ impl CallLog {
     pub fn with_position(mut self, position: u64) -> Self {
         self.position = position;
         self
+    }
+
+    /// Gets the decoded call log.
+    ///
+    /// Initializes with the default value if not yet set.
+    pub fn decoded(&mut self) -> &mut DecodedCallLog {
+        self.decoded.get_or_insert_with(Default::default)
+    }
+
+    pub(crate) fn decoded_name(&self) -> Option<&str> {
+        self.decoded.as_deref()?.name.as_deref()
+    }
+
+    pub(crate) fn decoded_params(&self) -> Option<&[(String, String)]> {
+        self.decoded.as_deref()?.params.as_deref()
     }
 }
 
@@ -215,20 +249,24 @@ impl CallTraceNode {
         &'a self,
         stack: &mut VecDeque<CallTraceStepStackItem<'a>>,
     ) {
-        stack.extend(self.call_step_stack().into_iter().rev());
-    }
+        let initial_len = stack.len();
 
-    /// Returns a list of all steps in this trace in the order they were executed
-    ///
-    /// If the step is a call, the id of the child trace is set.
-    pub(crate) fn call_step_stack(&self) -> Vec<CallTraceStepStackItem<'_>> {
-        let mut stack = Vec::with_capacity(self.trace.steps.len());
+        // First, extend the stack with all steps in reverse order
+        stack.extend(self.trace.steps.iter().rev().map(|step| CallTraceStepStackItem {
+            trace_node: self,
+            step,
+            call_child_id: None,
+        }));
+
+        // Then, iterate over the inserted range in reverse to set call_child_id values
+        // Since we inserted in reverse order, we need to process from the end to maintain
+        // the correct child_id assignment order
         let mut child_id = 0;
-        for step in self.trace.steps.iter() {
-            let mut item = CallTraceStepStackItem { trace_node: self, step, call_child_id: None };
+        for i in (initial_len..stack.len()).rev() {
+            let item = &mut stack[i];
 
-            // If the opcode is a call, put the child trace on the stack
-            if step.is_calllike_op() {
+            // If the opcode is a call, set the child trace id
+            if item.step.is_calllike_op() {
                 // The opcode of this step is a call but it's possible that this step resulted
                 // in a revert or out of gas error in which case there's no actual child call executed and recorded: <https://github.com/paradigmxyz/reth/issues/3915>
                 if let Some(call_id) = self.children.get(child_id).copied() {
@@ -236,9 +274,7 @@ impl CallTraceNode {
                     child_id += 1;
                 }
             }
-            stack.push(item);
         }
-        stack
     }
 
     /// Returns true if this is a call to a precompile
@@ -255,7 +291,7 @@ impl CallTraceNode {
 
     /// Returns the status of the call
     #[inline]
-    pub const fn status(&self) -> InstructionResult {
+    pub const fn status(&self) -> Option<InstructionResult> {
         self.trace.status
     }
 
@@ -396,7 +432,7 @@ impl CallTraceNode {
                 call_frame.to = None;
             }
 
-            if !self.status().is_revert() {
+            if !self.status().is_some_and(|status| status.is_revert()) {
                 call_frame.gas_used = U256::from(self.trace.gas_limit);
                 call_frame.output = None;
             }
@@ -407,15 +443,19 @@ impl CallTraceNode {
             call_frame.error = self.trace.as_error_msg(TraceStyle::Geth);
         }
 
+        #[allow(clippy::needless_update)]
         if include_logs && !self.logs.is_empty() {
             call_frame.logs = self
                 .logs
                 .iter()
-                .map(|log| CallLogFrame {
+                .map(|log|
+                    // TODO: add position after https://github.com/alloy-rs/alloy/pull/2748
+                    CallLogFrame {
                     address: Some(self.execution_address()),
                     topics: Some(log.raw_log.topics().to_vec()),
                     data: Some(log.raw_log.data.clone()),
                     position: Some(log.position),
+                    ..Default::default()
                 })
                 .collect();
         }
@@ -504,9 +544,9 @@ impl core::fmt::Display for CallKind {
 impl From<CallScheme> for CallKind {
     fn from(scheme: CallScheme) -> Self {
         match scheme {
-            CallScheme::Call | CallScheme::ExtCall => Self::Call,
-            CallScheme::StaticCall | CallScheme::ExtStaticCall => Self::StaticCall,
-            CallScheme::DelegateCall | CallScheme::ExtDelegateCall => Self::DelegateCall,
+            CallScheme::Call => Self::Call,
+            CallScheme::StaticCall => Self::StaticCall,
+            CallScheme::DelegateCall => Self::DelegateCall,
             CallScheme::CallCode => Self::CallCode,
         }
     }
@@ -603,8 +643,6 @@ pub struct CallTraceStep {
     pub depth: u64,
     /// Program counter before step execution
     pub pc: usize,
-    /// Code section index before step execution
-    pub code_section_idx: usize,
     /// Opcode to be executed
     #[cfg_attr(feature = "serde", serde(with = "opcode_serde"))]
     pub op: OpCode,
@@ -634,11 +672,11 @@ pub struct CallTraceStep {
     /// Final status of the step
     ///
     /// This is set after the step was executed.
-    pub status: InstructionResult,
+    pub status: Option<InstructionResult>,
     /// Immediate bytes of the step
     pub immediate_bytes: Option<Bytes>,
     /// Optional complementary decoded step data.
-    pub decoded: Option<DecodedTraceStep>,
+    pub decoded: Option<Box<DecodedTraceStep>>,
 }
 
 // === impl CallTraceStep ===
@@ -653,7 +691,8 @@ impl CallTraceStep {
             error: self.as_error(),
             gas: self.gas_remaining,
             gas_cost: self.gas_cost,
-            op: self.op.to_string(),
+            #[allow(clippy::useless_conversion)] // TODO https://github.com/alloy-rs/alloy/pull/2730
+            op: self.op.to_string().into(),
             pc: self.pc as u64,
             refund_counter: (self.gas_refund_counter > 0).then_some(self.gas_refund_counter),
             // Filled, if not disabled manually
@@ -703,13 +742,21 @@ impl CallTraceStep {
     // Returns true if the status code is an error or revert, See [InstructionResult::Revert]
     #[inline]
     pub(crate) const fn is_error(&self) -> bool {
-        self.status as u8 >= InstructionResult::Revert as u8
+        let Some(status) = self.status else {
+            return false;
+        };
+        status.is_error()
     }
 
     /// Returns the error message if it is an erroneous result.
     #[inline]
     pub(crate) fn as_error(&self) -> Option<String> {
         self.is_error().then(|| format!("{:?}", self.status))
+    }
+
+    /// Returns `DecodedTraceStep` from `CallTraceStep`.
+    pub fn decoded_mut(&mut self) -> &mut DecodedTraceStep {
+        self.decoded.get_or_insert_with(|| Box::new(DecodedTraceStep::Line(String::new())))
     }
 }
 
