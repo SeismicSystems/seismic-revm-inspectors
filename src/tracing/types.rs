@@ -319,7 +319,7 @@ impl CallTraceNode {
         trace_address: Vec<usize>,
         shield_output: bool,
     ) -> TransactionTrace {
-        let action = self.parity_action();
+        let action = self.parity_action(shield_output);
         let result = if self.trace.is_error() && !self.trace.is_revert() {
             // if the trace is a selfdestruct or an error that is not a revert, the result is None
             None
@@ -393,7 +393,8 @@ impl CallTraceNode {
     ///
     /// Caution: This does not include the selfdestruct action, if the trace is a selfdestruct,
     /// since those are handled in addition to the call action.
-    pub fn parity_action(&self) -> Action {
+    /// SHIELDED TRACE: only keep output if shield_output is false
+    pub fn parity_action(&self, shield_output: bool) -> Action {
         match self.kind() {
             CallKind::Call
             | CallKind::StaticCall
@@ -405,7 +406,7 @@ impl CallTraceNode {
                 value: self.trace.value,
                 gas: self.trace.gas_limit,
                 // SHIELDED TRACE: Mask the call data
-                input: Bytes::new(),
+                input: if shield_output { Bytes::new() } else { self.trace.data.clone() },
                 call_type: self.kind().into(),
                 // tx_type: self.trace.tx_type,
             }),
