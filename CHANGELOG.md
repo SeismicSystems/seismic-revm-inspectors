@@ -5,6 +5,176 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.29.0) - 2025-08-25
+
+### Dependencies
+
+- Bump to revm 29 ([#341](https://github.com/paradigmxyz/revm-inspectors/issues/341))
+
+## [0.28.2](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.28.2) - 2025-08-23
+
+### Miscellaneous Tasks
+
+- Release 0.28.2
+- Clippy defense ([#339](https://github.com/paradigmxyz/revm-inspectors/issues/339))
+- Add clone to storage inspector ([#340](https://github.com/paradigmxyz/revm-inspectors/issues/340))
+- Add default init callframe ([#338](https://github.com/paradigmxyz/revm-inspectors/issues/338))
+
+## [0.28.1](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.28.1) - 2025-08-20
+
+### Features
+
+- [js] Add logic to count current opcode cost instead of cumulative ([#336](https://github.com/paradigmxyz/revm-inspectors/issues/336))
+
+### Miscellaneous Tasks
+
+- Release 0.28.1
+- Make fns private ([#337](https://github.com/paradigmxyz/revm-inspectors/issues/337))
+
+## [0.28.0](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.28.0) - 2025-08-12
+
+### Dependencies
+
+- [deps] Bump revm 28.0.0, msrv 1.88 required for revm ([#334](https://github.com/paradigmxyz/revm-inspectors/issues/334))
+
+### Features
+
+- Reused call trace stack ([#325](https://github.com/paradigmxyz/revm-inspectors/issues/325))
+- Boxed the decoded field ([#326](https://github.com/paradigmxyz/revm-inspectors/issues/326))
+- Updated msrv to 1.86.0 ([#331](https://github.com/paradigmxyz/revm-inspectors/issues/331))
+
+### Miscellaneous Tasks
+
+- Release 0.28.0
+- Rm log clone ([#333](https://github.com/paradigmxyz/revm-inspectors/issues/333))
+- Decoded cleanups
+
+## [0.27.1](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.27.1) - 2025-07-21
+
+### Miscellaneous Tasks
+
+- Release 0.27.1
+- Use hashmap default ([#330](https://github.com/paradigmxyz/revm-inspectors/issues/330))
+
+## [0.27.0](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.27.0) - 2025-07-21
+
+### Bug Fixes
+
+- Allow single digit hex strings ([#329](https://github.com/paradigmxyz/revm-inspectors/issues/329))
+- [geth_tracer] Keccak input edge cases ([#328](https://github.com/paradigmxyz/revm-inspectors/issues/328))
+
+### Features
+
+- Add erc7562 config ([#317](https://github.com/paradigmxyz/revm-inspectors/issues/317))
+- Geth_erc7562_tracers addition ([#316](https://github.com/paradigmxyz/revm-inspectors/issues/316))
+- Use native BigInt with compatibility layer ([#314](https://github.com/paradigmxyz/revm-inspectors/issues/314))
+
+### Miscellaneous Tasks
+
+- Release 0.27.0
+
+### Performance
+
+- Allocate some more initial capacity for CallTraceArena ([#323](https://github.com/paradigmxyz/revm-inspectors/issues/323))
+- Optimize push_steps_on_stack to avoid temporary allocation ([#320](https://github.com/paradigmxyz/revm-inspectors/issues/320))
+- Pre alloc struct logs ([#319](https://github.com/paradigmxyz/revm-inspectors/issues/319))
+- Outline edgecov step fn ([#318](https://github.com/paradigmxyz/revm-inspectors/issues/318))
+
+### Testing
+
+- Add top call revert test ([#312](https://github.com/paradigmxyz/revm-inspectors/issues/312))
+
+## [0.26.5](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.26.5) - 2025-07-03
+
+### Bug Fixes
+
+- Always record revert ([#311](https://github.com/paradigmxyz/revm-inspectors/issues/311))
+
+### Miscellaneous Tasks
+
+- Release 0.26.5
+
+## [0.26.4](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.26.4) - 2025-07-03
+
+### Bug Fixes
+
+- Record manual revert pc ([#310](https://github.com/paradigmxyz/revm-inspectors/issues/310))
+
+### Miscellaneous Tasks
+
+- Release 0.26.4
+- Release 0.26.3
+
+## [0.26.2](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.26.2) - 2025-07-03
+
+### Bug Fixes
+
+- Use revert directly ([#309](https://github.com/paradigmxyz/revm-inspectors/issues/309))
+
+### Miscellaneous Tasks
+
+- Release 0.26.2
+
+## [0.26.1](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.26.1) - 2025-07-03
+
+### Bug Fixes
+
+- Record state diffs for vm tracer ([#308](https://github.com/paradigmxyz/revm-inspectors/issues/308))
+
+### Miscellaneous Tasks
+
+- Release 0.26.1
+
+## [0.26.0](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.26.0) - 2025-07-01
+
+### Dependencies
+
+- [deps] Bump to revm 27, alloy 1.2 ([#307](https://github.com/paradigmxyz/revm-inspectors/issues/307))
+
+### Miscellaneous Tasks
+
+- Release 0.26.0
+- Add trace_addresses helper ([#306](https://github.com/paradigmxyz/revm-inspectors/issues/306))
+
+## [0.25.0](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.25.0) - 2025-06-20
+
+### Dependencies
+
+- Bump revm v26.0.0 ([#303](https://github.com/paradigmxyz/revm-inspectors/issues/303))
+
+### Miscellaneous Tasks
+
+- Release 0.25.0
+
+## [0.24.0](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.24.0) - 2025-06-13
+
+### Bug Fixes
+
+- Deduct call opcode gas ([#304](https://github.com/paradigmxyz/revm-inspectors/issues/304))
+
+### Miscellaneous Tasks
+
+- Release 0.24.0
+
+## [0.23.1](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.23.1) - 2025-06-07
+
+### Miscellaneous Tasks
+
+- Release 0.23.1
+- Remove EOF leftovers ([#301](https://github.com/paradigmxyz/revm-inspectors/issues/301))
+- Update deny.toml and upgrade CI workflow ([#302](https://github.com/paradigmxyz/revm-inspectors/issues/302))
+
+## [0.23.0](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.23.0) - 2025-05-23
+
+### Dependencies
+
+- [`deps`] Bump revm to 24.0.0 ([#300](https://github.com/paradigmxyz/revm-inspectors/issues/300))
+
+### Miscellaneous Tasks
+
+- Release 0.23.0
+- Remove eof trace handlers ([#299](https://github.com/paradigmxyz/revm-inspectors/issues/299))
+
 ## [0.22.3](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.22.3) - 2025-05-19
 
 ### Bug Fixes
@@ -13,6 +183,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Miscellaneous Tasks
 
+- Release 0.22.3
 - Make clippy happy ([#297](https://github.com/paradigmxyz/revm-inspectors/issues/297))
 
 ## [0.22.2](https://github.com/paradigmxyz/revm-inspectors/releases/tag/v0.22.2) - 2025-05-16
