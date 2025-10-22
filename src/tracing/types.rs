@@ -335,7 +335,7 @@ impl CallTraceNode {
         self.parity_trace_output_with_shielding(false)
     }
 
-    /// Returns the `Output` for a parity trace with optional data masking
+    /// SHIELDED TRACE: Returns the `Output` for a parity trace with optional data masking
     pub fn parity_trace_output_with_shielding(&self, shield_output: bool) -> TraceOutput {
         match self.kind() {
             CallKind::Call
@@ -344,12 +344,11 @@ impl CallTraceNode {
             | CallKind::DelegateCall
             | CallKind::AuthCall => TraceOutput::Call(CallOutput {
                 gas_used: self.trace.gas_used,
-                // Mask output for nested calls (keep for root call)
+                // SHIELDED TRACE: Mask output for nested calls (keep for root call)
                 output: if shield_output { self.trace.output.clone() } else { Bytes::new() },
             }),
             CallKind::Create | CallKind::Create2 => TraceOutput::Create(CreateOutput {
                 gas_used: self.trace.gas_used,
-                // Mask code for nested calls (keep for root call)
                 code: self.trace.output.clone(),
                 address: self.trace.address,
             }),
@@ -405,7 +404,7 @@ impl CallTraceNode {
                 to: self.trace.address,
                 value: self.trace.value,
                 gas: self.trace.gas_limit,
-                // Mask the call data
+                // SHIELDED TRACE: Mask the call data
                 input: Bytes::new(),
                 call_type: self.kind().into(),
                 // tx_type: self.trace.tx_type,
@@ -425,7 +424,8 @@ impl CallTraceNode {
         self.geth_empty_call_frame_with_shielding(include_logs, false)
     }
 
-    /// Converts this call trace into an _empty_ geth [CallFrame] with optional data masking
+    /// SHIELDED TRACE: Converts this call trace into an _empty_ geth [CallFrame] with optional data
+    /// masking
     pub fn geth_empty_call_frame_with_shielding(
         &self,
         include_logs: bool,
@@ -438,9 +438,9 @@ impl CallTraceNode {
             value: Some(self.trace.value),
             gas: U256::from(self.trace.gas_limit),
             gas_used: U256::from(self.trace.gas_used),
-            // Mask input for nested calls
+            // SHIELDED TRACE: Mask input for nested calls
             input: Bytes::new(),
-            // Mask output for nested calls (keep for root call)
+            // SHIELDED TRACE: Mask output for nested calls (keep for root call)
             output: if shield_output {
                 (!self.trace.output.is_empty()).then(|| self.trace.output.clone())
             } else {
@@ -469,7 +469,7 @@ impl CallTraceNode {
                 call_frame.output = None;
             }
 
-            // Extract revert reason but don't expose the raw output
+            // SHIELDED TRACE: Extract revert reason but don't expose the raw output
             call_frame.revert_reason = utils::maybe_revert_reason(self.trace.output.as_ref());
 
             // Note: regular calltracer uses geth errors, only flatCallTracer uses parity errors: <https://github.com/ethereum/go-ethereum/blob/a9523b6428238a762e1a1e55e46ead47630c3a23/eth/tracers/native/call_flat.go#L226>
@@ -493,8 +493,6 @@ impl CallTraceNode {
                 })
                 .collect();
         }
-
-        // println!("call_frame: {:?}", call_frame);
 
         call_frame
     }

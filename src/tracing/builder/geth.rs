@@ -262,15 +262,13 @@ impl<'a> GethTraceBuilder<'a> {
             let code = code_enabled.then(|| load_account_code(&db, &db_acc)).flatten();
             let mut acc_state = AccountState::from_account_info(db_acc.nonce, db_acc.balance, code);
 
-            // insert the original value of all modified storage slots if
-            // original_value.is_public(), else use 0
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter() {
                     if slot.original_value.is_public() {
                         acc_state.storage.insert((*key).into(), slot.original_value.into());
                     }
-                    // Choosing to not even show the storage changes for private storage slots
-                    // else {
+                    // SHIELDED TRACE: Choosing to not even show the storage changes for private
+                    // storage slots else {
                     //     acc_state.storage.insert((*key).into(), B256::ZERO);
                     // }
                 }
@@ -314,6 +312,7 @@ impl<'a> GethTraceBuilder<'a> {
                     if slot.original_value.is_public() {
                         pre_state.storage.insert((*key).into(), slot.original_value.into());
                     }
+                    // SHIELDED TRACE: don't show shielded storage changes
                     // else {
                     //     pre_state.storage.insert((*key).into(), B256::ZERO);
                     // }

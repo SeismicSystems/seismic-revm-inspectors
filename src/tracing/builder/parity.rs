@@ -303,7 +303,8 @@ impl ParityTraceBuilder {
         self.into_transaction_traces_iter_with_shielding(false)
     }
 
-    /// Returns an iterator over all recorded traces  for `trace_transaction` with masking
+    /// SHIELDED TRACE: Returns an iterator over all recorded traces for `trace_transaction` with
+    /// shielding
     pub fn into_transaction_traces_iter_with_shielding(
         self,
         mask_outputs: bool,
