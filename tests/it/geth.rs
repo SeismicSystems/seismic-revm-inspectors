@@ -103,8 +103,7 @@ fn test_geth_calltracer_logs() {
     assert_eq!(call_frame.calls[2].logs.len(), 1);
     assert!(call_frame.calls[2].error.is_none());
 
-    // log the entire output 
-    
+    // log the entire output
 }
 
 #[test]

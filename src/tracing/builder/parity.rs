@@ -265,7 +265,10 @@ impl ParityTraceBuilder {
         for (index, node) in self.iter_traceable_nodes().enumerate() {
             let trace_address = self.trace_address(node.idx);
             // Only the first trace (root call) gets the shield_output flag
-            let trace = node.parity_transaction_trace_with_shielding(trace_address, shield_output && index == 0);
+            let trace = node.parity_transaction_trace_with_shielding(
+                trace_address,
+                shield_output && index == 0,
+            );
             traces.push(trace);
 
             if node.is_selfdestruct() {
@@ -301,7 +304,10 @@ impl ParityTraceBuilder {
     }
 
     /// Returns an iterator over all recorded traces  for `trace_transaction` with masking
-    pub fn into_transaction_traces_iter_with_shielding(self, mask_outputs: bool) -> impl Iterator<Item = TransactionTrace> {
+    pub fn into_transaction_traces_iter_with_shielding(
+        self,
+        mask_outputs: bool,
+    ) -> impl Iterator<Item = TransactionTrace> {
         let trace_addresses = self.trace_addresses();
         TransactionTraceIter {
             next_selfdestructs: Default::default(),
@@ -312,9 +318,13 @@ impl ParityTraceBuilder {
                 .enumerate()
                 .filter(|(_, (node, _))| !node.is_precompile())
                 .map(move |(index, (node, trace_address))| {
-                    // Only the first trace (root call) gets the shield_output flag when mask_outputs is true
+                    // Only the first trace (root call) gets the shield_output flag when
+                    // mask_outputs is true
                     let shield_output = mask_outputs && index == 0;
-                    (node.parity_transaction_trace_with_shielding(trace_address, shield_output), node)
+                    (
+                        node.parity_transaction_trace_with_shielding(trace_address, shield_output),
+                        node,
+                    )
                 })
                 .peekable(),
         }

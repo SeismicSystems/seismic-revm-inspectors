@@ -314,7 +314,11 @@ impl CallTraceNode {
     }
 
     /// Converts this node into a parity `TransactionTrace` with optional data masking
-    pub fn parity_transaction_trace_with_shielding(&self, trace_address: Vec<usize>, shield_output: bool) -> TransactionTrace {
+    pub fn parity_transaction_trace_with_shielding(
+        &self,
+        trace_address: Vec<usize>,
+        shield_output: bool,
+    ) -> TransactionTrace {
         let action = self.parity_action();
         let result = if self.trace.is_error() && !self.trace.is_revert() {
             // if the trace is a selfdestruct or an error that is not a revert, the result is None
@@ -341,11 +345,7 @@ impl CallTraceNode {
             | CallKind::AuthCall => TraceOutput::Call(CallOutput {
                 gas_used: self.trace.gas_used,
                 // Mask output for nested calls (keep for root call)
-                output: if shield_output {
-                    self.trace.output.clone()
-                } else {
-                    Bytes::new()
-                },
+                output: if shield_output { self.trace.output.clone() } else { Bytes::new() },
             }),
             CallKind::Create | CallKind::Create2 => TraceOutput::Create(CreateOutput {
                 gas_used: self.trace.gas_used,
@@ -426,7 +426,11 @@ impl CallTraceNode {
     }
 
     /// Converts this call trace into an _empty_ geth [CallFrame] with optional data masking
-    pub fn geth_empty_call_frame_with_shielding(&self, include_logs: bool, shield_output: bool) -> CallFrame {
+    pub fn geth_empty_call_frame_with_shielding(
+        &self,
+        include_logs: bool,
+        shield_output: bool,
+    ) -> CallFrame {
         let mut call_frame = CallFrame {
             typ: self.trace.kind.to_string(),
             from: self.trace.caller,
@@ -466,9 +470,7 @@ impl CallTraceNode {
             }
 
             // Extract revert reason but don't expose the raw output
-            call_frame.revert_reason = utils::maybe_revert_reason(
-                self.trace.output.as_ref()
-            );
+            call_frame.revert_reason = utils::maybe_revert_reason(self.trace.output.as_ref());
 
             // Note: regular calltracer uses geth errors, only flatCallTracer uses parity errors: <https://github.com/ethereum/go-ethereum/blob/a9523b6428238a762e1a1e55e46ead47630c3a23/eth/tracers/native/call_flat.go#L226>
             call_frame.error = self.trace.as_error_msg(TraceStyle::Geth);
