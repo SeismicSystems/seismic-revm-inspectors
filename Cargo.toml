@@ -67,12 +67,12 @@ serde = ["dep:serde", "revm/serde"]
 js-tracer = ["dep:boa_engine", "dep:boa_gc"]
 
 [patch.crates-io]
-alloy-primitives = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "33e302d06f56bb4dda85359005af7e302f48272f" }
-alloy-json-abi = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "33e302d06f56bb4dda85359005af7e302f48272f" }
-alloy-sol-macro-expander = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "33e302d06f56bb4dda85359005af7e302f48272f" }
-alloy-sol-macro-input = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "33e302d06f56bb4dda85359005af7e302f48272f" }
-alloy-sol-types = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "33e302d06f56bb4dda85359005af7e302f48272f" }
-alloy-sol-type-parser = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "33e302d06f56bb4dda85359005af7e302f48272f" }
+alloy-primitives = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "fa63d477d6aa01e7203b677632c31cb3eba00640" }
+alloy-json-abi = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "fa63d477d6aa01e7203b677632c31cb3eba00640" }
+alloy-sol-macro-expander = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "fa63d477d6aa01e7203b677632c31cb3eba00640" }
+alloy-sol-macro-input = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "fa63d477d6aa01e7203b677632c31cb3eba00640" }
+alloy-sol-types = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "fa63d477d6aa01e7203b677632c31cb3eba00640" }
+alloy-sol-type-parser = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "fa63d477d6aa01e7203b677632c31cb3eba00640" }
 
 revm = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "5df78108a382e66420ad9b815d3f41b5e35f3cc8" }
 revm-primitives = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "5df78108a382e66420ad9b815d3f41b5e35f3cc8"}
