@@ -17,7 +17,8 @@ const MAX_EDGE_COUNT: usize = 65536;
 /// An `Inspector` that tracks [edge coverage](https://clang.llvm.org/docs/SanitizerCoverage.html#edge-coverage).
 /// Covered edges will not wrap to zero e.g. a loop edge hit more than 255 will still be retained.
 // see https://github.com/AFLplusplus/AFLplusplus/blob/5777ceaf23f48ae4ceae60e4f3a79263802633c6/instrumentation/afl-llvm-pass.so.cc#L810-L829
-#[derive(Clone, Debug)]
+#[derive(Clone)]
+#[allow(missing_debug_implementations)]
 pub struct EdgeCovInspector {
     /// Map of hitcounts that can be diffed against to determine if new coverage was reached.
     hitcount: Vec<u8>,
