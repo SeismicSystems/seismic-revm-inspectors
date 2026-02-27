@@ -97,6 +97,7 @@ pub struct CallTrace {
     /// Opcode-level execution steps.
     pub steps: Vec<CallTraceStep>,
     /// The type of transaction
+    #[cfg_attr(feature = "serde", serde(default))]
     pub tx_type: isize,
     /// Optional complementary decoded call data.
     pub decoded: Option<Box<DecodedCallTrace>>,
