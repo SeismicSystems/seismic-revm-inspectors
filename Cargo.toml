@@ -42,6 +42,14 @@ anstyle = { version = "1.0", optional = true }
 colorchoice = "1.0"
 thiserror = { version = "2.0", default-features = false }
 
+# Pin alloy transitive deps to match reth
+alloy-consensus = { version = "=1.1.0", default-features = false }
+alloy-eips = { version = "=1.1.0", default-features = false }
+alloy-network-primitives = { version = "=1.1.0", default-features = false }
+alloy-consensus-any = { version = "=1.1.0", default-features = false }
+alloy-serde = { version = "=1.1.0", default-features = false }
+alloy-tx-macros = { version = "=1.1.0", default-features = false }
+
 # serde
 serde = { version = "1", optional = true, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
@@ -75,4 +83,13 @@ alloy-sol-types = { git = "https://github.com/SeismicSystems/seismic-alloy-core.
 alloy-sol-type-parser = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "994f7b3fbc4582c2e06a00d03c7f3fe476b1b7c7" }
 
 revm = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c" }
-revm-primitives = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c"}
+revm-bytecode = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c" }
+revm-database = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c" }
+revm-state = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c" }
+revm-primitives = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c" }
+revm-interpreter = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c" }
+revm-inspector = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c" }
+revm-context = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c" }
+revm-context-interface = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c" }
+revm-database-interface = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "e2915bad927dc3e6239498716241ed41ea91de4c" }
+
