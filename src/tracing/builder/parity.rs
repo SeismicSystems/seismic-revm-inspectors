@@ -423,7 +423,7 @@ impl ParityTraceBuilder {
     ) -> VmInstruction {
         let maybe_storage = step.storage_change.map(|storage_change| StorageDelta {
             key: storage_change.key,
-            val: storage_change.value.into(),
+            val: storage_change.value.value.into(),
         });
 
         let maybe_memory = step
@@ -586,7 +586,7 @@ where
             // new storage values are marked as added,
             // however we're filtering changed here to avoid adding entries for the zero value
             for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed()) {
-                entry.storage.insert((*key).into(), Delta::Added(slot.present_value.into()));
+                entry.storage.insert((*key).into(), Delta::Added(slot.present_value.value.into()));
             }
         } else {
             // we check if this account was created during the transaction
@@ -602,7 +602,7 @@ where
             for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed()) {
                 entry.storage.insert(
                     (*key).into(),
-                    Delta::changed(slot.original_value.into(), slot.present_value.into()),
+                    Delta::changed(slot.original_value.value.into(), slot.present_value.value.into()),
                 );
             }
 

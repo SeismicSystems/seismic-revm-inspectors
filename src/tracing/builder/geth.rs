@@ -85,7 +85,7 @@ impl<'a> GethTraceBuilder<'a> {
             if opts.is_storage_enabled() {
                 let contract_storage = storage.entry(step.contract).or_default();
                 if let Some(change) = step.storage_change {
-                    contract_storage.insert(change.key.into(), change.value.into());
+                    contract_storage.insert(change.key.into(), change.value.value.into());
                     log.storage = Some(contract_storage.clone());
                 }
             }
@@ -265,7 +265,7 @@ impl<'a> GethTraceBuilder<'a> {
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter() {
                     if slot.original_value.is_public() {
-                        acc_state.storage.insert((*key).into(), slot.original_value.into());
+                        acc_state.storage.insert((*key).into(), slot.original_value.value.into());
                     }
                     // SHIELDED TRACE: Choosing to not even show the storage changes for private
                     // storage slots else {
@@ -310,7 +310,7 @@ impl<'a> GethTraceBuilder<'a> {
                 for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed())
                 {
                     if slot.original_value.is_public() {
-                        pre_state.storage.insert((*key).into(), slot.original_value.into());
+                        pre_state.storage.insert((*key).into(), slot.original_value.value.into());
                     }
                     // SHIELDED TRACE: don't show shielded storage changes
                     // else {
@@ -318,7 +318,7 @@ impl<'a> GethTraceBuilder<'a> {
                     // }
 
                     if slot.present_value.is_public() {
-                        post_state.storage.insert((*key).into(), slot.present_value.into());
+                        post_state.storage.insert((*key).into(), slot.present_value.value.into());
                     }
                     // else {
                     //     post_state.storage.insert((*key).into(), B256::ZERO);
@@ -428,7 +428,7 @@ impl<'a> GethTraceBuilder<'a> {
                                 let already_written = accessed_slots.writes.contains_key(&slot);
                                 if !already_read && !already_written {
                                     if let Some(change) = &step.storage_change {
-                                        let value: B256 = change.value.into();
+                                        let value: B256 = change.value.value.into();
                                         accessed_slots.reads.entry(slot).or_default().push(value);
                                     }
                                 }
