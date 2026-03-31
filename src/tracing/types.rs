@@ -8,8 +8,8 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-pub use alloy_primitives::Log;
 use alloy_primitives::{Address, Bytes, FixedBytes, LogData, U256};
+pub use alloy_primitives::{FlaggedStorage, Log};
 use alloy_rpc_types_trace::{
     geth::{CallFrame, CallLogFrame, GethDefaultTracingOptions, StructLog},
     parity::{
@@ -96,8 +96,6 @@ pub struct CallTrace {
     pub status: Option<InstructionResult>,
     /// Opcode-level execution steps.
     pub steps: Vec<CallTraceStep>,
-    /// The type of transaction
-    pub tx_type: isize,
     /// Optional complementary decoded call data.
     pub decoded: Option<Box<DecodedCallTrace>>,
 }
@@ -310,21 +308,12 @@ impl CallTraceNode {
 
     /// Converts this node into a parity `TransactionTrace`
     pub fn parity_transaction_trace(&self, trace_address: Vec<usize>) -> TransactionTrace {
-        self.parity_transaction_trace_with_shielding(trace_address, false)
-    }
-
-    /// Converts this node into a parity `TransactionTrace` with optional data masking
-    pub fn parity_transaction_trace_with_shielding(
-        &self,
-        trace_address: Vec<usize>,
-        shield_output: bool,
-    ) -> TransactionTrace {
-        let action = self.parity_action(shield_output);
+        let action = self.parity_action();
         let result = if self.trace.is_error() && !self.trace.is_revert() {
             // if the trace is a selfdestruct or an error that is not a revert, the result is None
             None
         } else {
-            Some(self.parity_trace_output_with_shielding(shield_output))
+            Some(self.parity_trace_output())
         };
         let error = self.trace.as_error_msg(TraceStyle::Parity);
         TransactionTrace { action, error, result, trace_address, subtraces: self.children.len() }
@@ -332,11 +321,6 @@ impl CallTraceNode {
 
     /// Returns the `Output` for a parity trace
     pub fn parity_trace_output(&self) -> TraceOutput {
-        self.parity_trace_output_with_shielding(false)
-    }
-
-    /// SHIELDED TRACE: Returns the `Output` for a parity trace with optional data masking
-    pub fn parity_trace_output_with_shielding(&self, shield_output: bool) -> TraceOutput {
         match self.kind() {
             CallKind::Call
             | CallKind::StaticCall
@@ -344,8 +328,7 @@ impl CallTraceNode {
             | CallKind::DelegateCall
             | CallKind::AuthCall => TraceOutput::Call(CallOutput {
                 gas_used: self.trace.gas_used,
-                // SHIELDED TRACE: Mask output for nested calls (keep for root call)
-                output: if shield_output { self.trace.output.clone() } else { Bytes::new() },
+                output: self.trace.output.clone(),
             }),
             CallKind::Create | CallKind::Create2 => TraceOutput::Create(CreateOutput {
                 gas_used: self.trace.gas_used,
@@ -393,8 +376,7 @@ impl CallTraceNode {
     ///
     /// Caution: This does not include the selfdestruct action, if the trace is a selfdestruct,
     /// since those are handled in addition to the call action.
-    /// SHIELDED TRACE: only keep output if shield_output is false
-    pub fn parity_action(&self, shield_output: bool) -> Action {
+    pub fn parity_action(&self) -> Action {
         match self.kind() {
             CallKind::Call
             | CallKind::StaticCall
@@ -405,10 +387,8 @@ impl CallTraceNode {
                 to: self.trace.address,
                 value: self.trace.value,
                 gas: self.trace.gas_limit,
-                // SHIELDED TRACE: Mask the call data
-                input: if shield_output { Bytes::new() } else { self.trace.data.clone() },
+                input: self.trace.data.clone(),
                 call_type: self.kind().into(),
-                // tx_type: self.trace.tx_type,
             }),
             CallKind::Create | CallKind::Create2 => Action::Create(CreateAction {
                 from: self.trace.caller,
@@ -422,16 +402,6 @@ impl CallTraceNode {
 
     /// Converts this call trace into an _empty_ geth [CallFrame]
     pub fn geth_empty_call_frame(&self, include_logs: bool) -> CallFrame {
-        self.geth_empty_call_frame_with_shielding(include_logs, false)
-    }
-
-    /// SHIELDED TRACE: Converts this call trace into an _empty_ geth [CallFrame] with optional data
-    /// masking
-    pub fn geth_empty_call_frame_with_shielding(
-        &self,
-        include_logs: bool,
-        shield_output: bool,
-    ) -> CallFrame {
         let mut call_frame = CallFrame {
             typ: self.trace.kind.to_string(),
             from: self.trace.caller,
@@ -439,19 +409,12 @@ impl CallTraceNode {
             value: Some(self.trace.value),
             gas: U256::from(self.trace.gas_limit),
             gas_used: U256::from(self.trace.gas_used),
-            // SHIELDED TRACE: Mask input for nested calls
-            input: Bytes::new(),
-            // SHIELDED TRACE: Mask output for nested calls (keep for root call)
-            output: if shield_output {
-                (!self.trace.output.is_empty()).then(|| self.trace.output.clone())
-            } else {
-                None
-            },
+            input: self.trace.data.clone(),
+            output: (!self.trace.output.is_empty()).then(|| self.trace.output.clone()),
             error: None,
             revert_reason: None,
             calls: Default::default(),
             logs: Default::default(),
-            // tx_type: self.trace.tx_type,
         };
 
         if self.trace.kind.is_static_call() {
@@ -470,7 +433,6 @@ impl CallTraceNode {
                 call_frame.output = None;
             }
 
-            // SHIELDED TRACE: Extract revert reason but don't expose the raw output
             call_frame.revert_reason = utils::maybe_revert_reason(self.trace.output.as_ref());
 
             // Note: regular calltracer uses geth errors, only flatCallTracer uses parity errors: <https://github.com/ethereum/go-ethereum/blob/a9523b6428238a762e1a1e55e46ead47630c3a23/eth/tracers/native/call_flat.go#L226>
@@ -487,8 +449,7 @@ impl CallTraceNode {
                     CallLogFrame {
                     address: Some(self.execution_address()),
                     topics: Some(log.raw_log.topics().to_vec()),
-                    // Mask log data
-                    data: Some(Bytes::new()),
+                    data: Some(log.raw_log.data.clone()),
                     position: Some(log.position),
                     ..Default::default()
                 })
@@ -820,9 +781,9 @@ pub struct StorageChange {
     /// key of the storage slot
     pub key: U256,
     /// Current value of the storage slot
-    pub value: revm::primitives::FlaggedStorage,
+    pub value: FlaggedStorage,
     /// The previous value of the storage slot, if any
-    pub had_value: Option<revm::primitives::FlaggedStorage>,
+    pub had_value: Option<FlaggedStorage>,
     /// How this storage was accessed
     pub reason: StorageChangeReason,
 }

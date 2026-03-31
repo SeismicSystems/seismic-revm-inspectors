@@ -164,6 +164,4 @@ pub enum TransferKind {
     Create2,
     /// A SELFDESTRUCT operation
     SelfDestruct,
-    /// A EOFCREATE operation
-    EofCreate,
 }

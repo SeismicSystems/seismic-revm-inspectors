@@ -53,8 +53,12 @@ mod writer;
 #[cfg(feature = "std")]
 pub use writer::{TraceWriter, TraceWriterConfig};
 
-#[cfg(feature = "js-tracer")]
-pub mod js;
+// JS tracer removed: it gives caller-supplied JavaScript arbitrary live access to
+// stack, memory, and storage during execution, which is incompatible with Seismic's
+// privacy model. We could reenable this in the future if we make revm's stack hold FlaggedStorage
+// and do full filtering of the JS output, but that's a pretty big lift.
+// #[cfg(feature = "js-tracer")]
+// pub mod js;
 
 mod mux;
 pub use mux::{Error as MuxError, MuxInspector};
@@ -199,23 +203,6 @@ impl TracingInspector {
         if let Some(node) = self.traces.arena.first_mut() {
             node.trace.gas_used = gas_used;
         }
-    }
-
-    /// Manually set the transaction type of the root trace.
-    pub fn set_transaction_type(&mut self, tx_type_opt: Option<isize>) {
-        if let Some(tx_type) = tx_type_opt {
-            if let Some(node) = self.traces.arena.first_mut() {
-                node.trace.tx_type = tx_type;
-            }
-        }
-    }
-
-    /// Convenience function for [TracingInspector::set_transaction_type] that consumes the
-    /// type.
-    #[inline]
-    pub fn with_transaction_type(mut self, tx_type_opt: Option<isize>) -> Self {
-        self.set_transaction_type(tx_type_opt);
-        self
     }
 
     /// Manually set the gas limit of the debug root trace.
@@ -555,12 +542,8 @@ impl TracingInspector {
                         opcode::SSTORE => StorageChangeReason::SSTORE,
                         _ => unreachable!(),
                     };
-                    let change = StorageChange {
-                        key: *key,
-                        value: value.into(),
-                        had_value: Some(*had_value),
-                        reason,
-                    };
+                    let change =
+                        StorageChange { key: *key, value, had_value: Some(*had_value), reason };
                     Some(change)
                 }
                 _ => None,

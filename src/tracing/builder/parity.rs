@@ -122,16 +122,7 @@ impl ParityTraceBuilder {
         self,
         info: TransactionInfo,
     ) -> impl Iterator<Item = LocalizedTransactionTrace> {
-        self.into_localized_transaction_traces_iter_with_shielding(info, true)
-    }
-
-    /// Returns an iterator over all recorded traces  for `trace_transaction` with masking
-    pub fn into_localized_transaction_traces_iter_with_shielding(
-        self,
-        info: TransactionInfo,
-        mask_outputs: bool,
-    ) -> impl Iterator<Item = LocalizedTransactionTrace> {
-        self.into_transaction_traces_iter_with_shielding(mask_outputs).map(move |trace| {
+        self.into_transaction_traces_iter().map(move |trace| {
             let TransactionInfo { hash, index, block_hash, block_number, .. } = info;
             LocalizedTransactionTrace {
                 trace,
@@ -149,15 +140,6 @@ impl ParityTraceBuilder {
         info: TransactionInfo,
     ) -> Vec<LocalizedTransactionTrace> {
         self.into_localized_transaction_traces_iter(info).collect()
-    }
-
-    /// Returns all recorded traces for `trace_transaction` with masking
-    pub fn into_localized_transaction_traces_with_shielding(
-        self,
-        info: TransactionInfo,
-        mask_outputs: bool,
-    ) -> Vec<LocalizedTransactionTrace> {
-        self.into_localized_transaction_traces_iter_with_shielding(info, mask_outputs).collect()
     }
 
     /// Consumes the inspector and returns the trace results according to the configured trace
@@ -254,21 +236,13 @@ impl ParityTraceBuilder {
     /// Selfdestructs appear as individual [`TransactionTrace`] instance but selfdestructs are
     /// tracked as metadata of the recorded nodes.
     fn transaction_traces(&self) -> Vec<TransactionTrace> {
-        self.transaction_traces_with_shielding(false)
-    }
-
-    fn transaction_traces_with_shielding(&self, shield_output: bool) -> Vec<TransactionTrace> {
         let mut traces = Vec::with_capacity(self.nodes.len());
         // Boolean marker to track if sorting for selfdestruct is needed
         let mut sorting_selfdestruct = false;
 
-        for (index, node) in self.iter_traceable_nodes().enumerate() {
+        for node in self.iter_traceable_nodes() {
             let trace_address = self.trace_address(node.idx);
-            // Only the first trace (root call) gets the shield_output flag
-            let trace = node.parity_transaction_trace_with_shielding(
-                trace_address,
-                shield_output && index == 0,
-            );
+            let trace = node.parity_transaction_trace(trace_address);
             traces.push(trace);
 
             if node.is_selfdestruct() {
@@ -300,15 +274,6 @@ impl ParityTraceBuilder {
 
     /// Returns an iterator over all recorded traces  for `trace_transaction`
     pub fn into_transaction_traces_iter(self) -> impl Iterator<Item = TransactionTrace> {
-        self.into_transaction_traces_iter_with_shielding(false)
-    }
-
-    /// SHIELDED TRACE: Returns an iterator over all recorded traces for `trace_transaction` with
-    /// shielding
-    pub fn into_transaction_traces_iter_with_shielding(
-        self,
-        mask_outputs: bool,
-    ) -> impl Iterator<Item = TransactionTrace> {
         let trace_addresses = self.trace_addresses();
         TransactionTraceIter {
             next_selfdestructs: Default::default(),
@@ -316,17 +281,8 @@ impl ParityTraceBuilder {
                 .nodes
                 .into_iter()
                 .zip(trace_addresses)
-                .enumerate()
-                .filter(|(_, (node, _))| !node.is_precompile())
-                .map(move |(index, (node, trace_address))| {
-                    // Only the first trace (root call) gets the shield_output flag when
-                    // mask_outputs is true
-                    let shield_output = mask_outputs && index == 0;
-                    (
-                        node.parity_transaction_trace_with_shielding(trace_address, shield_output),
-                        node,
-                    )
-                })
+                .filter(|(node, _)| !node.is_precompile())
+                .map(|(node, trace_address)| (node.parity_transaction_trace(trace_address), node))
                 .peekable(),
         }
     }
@@ -423,7 +379,7 @@ impl ParityTraceBuilder {
     ) -> VmInstruction {
         let maybe_storage = step.storage_change.map(|storage_change| StorageDelta {
             key: storage_change.key,
-            val: storage_change.value.value.into(),
+            val: storage_change.value.value,
         });
 
         let maybe_memory = step

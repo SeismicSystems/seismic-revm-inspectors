@@ -152,8 +152,7 @@ impl<'a> GethTraceBuilder<'a> {
         let include_logs = opts.with_log.unwrap_or_default();
         // first fill up the root
         let main_trace_node = &self.nodes[0];
-        let mut root_call_frame =
-            main_trace_node.geth_empty_call_frame_with_shielding(include_logs, true);
+        let mut root_call_frame = main_trace_node.geth_empty_call_frame(include_logs);
         root_call_frame.gas_used = U256::from(gas_used);
 
         // selfdestructs are not recorded as individual call traces but are derived from
@@ -175,8 +174,7 @@ impl<'a> GethTraceBuilder<'a> {
         for (idx, trace) in self.nodes.iter().enumerate().skip(1) {
             // include logs only if call and all its parents were successful
             let include_logs = include_logs && !self.call_or_parent_failed(trace);
-            call_frames
-                .push((idx, trace.geth_empty_call_frame_with_shielding(include_logs, false)));
+            call_frames.push((idx, trace.geth_empty_call_frame(include_logs)));
 
             // selfdestructs are not recorded as individual call traces but are derived from
             // the call trace and are added as additional `CallFrame` objects
@@ -262,15 +260,10 @@ impl<'a> GethTraceBuilder<'a> {
             let code = code_enabled.then(|| load_account_code(&db, &db_acc)).flatten();
             let mut acc_state = AccountState::from_account_info(db_acc.nonce, db_acc.balance, code);
 
+            // insert the original value of all modified storage slots
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter() {
-                    if slot.original_value.is_public() {
-                        acc_state.storage.insert((*key).into(), slot.original_value.value.into());
-                    }
-                    // SHIELDED TRACE: Choosing to not even show the storage changes for private
-                    // storage slots else {
-                    //     acc_state.storage.insert((*key).into(), B256::ZERO);
-                    // }
+                    acc_state.storage.insert((*key).into(), slot.original_value.value.into());
                 }
             }
 
@@ -309,20 +302,8 @@ impl<'a> GethTraceBuilder<'a> {
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed())
                 {
-                    if slot.original_value.is_public() {
-                        pre_state.storage.insert((*key).into(), slot.original_value.value.into());
-                    }
-                    // SHIELDED TRACE: don't show shielded storage changes
-                    // else {
-                    //     pre_state.storage.insert((*key).into(), B256::ZERO);
-                    // }
-
-                    if slot.present_value.is_public() {
-                        post_state.storage.insert((*key).into(), slot.present_value.value.into());
-                    }
-                    // else {
-                    //     post_state.storage.insert((*key).into(), B256::ZERO);
-                    // }
+                    pre_state.storage.insert((*key).into(), slot.original_value.value.into());
+                    post_state.storage.insert((*key).into(), slot.present_value.value.into());
                 }
             }
 
