@@ -87,7 +87,8 @@ impl MuxInspector {
                         .merge(TracingInspectorConfig::from_flat_call_config(&flatcall_config));
                     configs.push((tracer_type, TraceConfig::FlatCall(flatcall_config)));
                 }
-                GethDebugBuiltInTracerType::MuxTracer => {
+                GethDebugBuiltInTracerType::MuxTracer
+                | GethDebugBuiltInTracerType::Erc7562Tracer => {
                     return Err(Error::UnexpectedConfig(tracer_type));
                 }
             }
