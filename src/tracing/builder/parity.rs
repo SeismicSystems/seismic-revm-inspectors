@@ -23,6 +23,8 @@ use revm::{
 pub struct ParityTraceBuilder {
     /// Recorded trace nodes
     nodes: Vec<CallTraceNode>,
+    /// Whether to exclude private storage slots from trace output.
+    filter_private_storage: bool,
 }
 
 impl ParityTraceBuilder {
@@ -32,7 +34,13 @@ impl ParityTraceBuilder {
         _spec_id: Option<SpecId>,
         _config: TracingInspectorConfig,
     ) -> Self {
-        Self { nodes }
+        Self { nodes, filter_private_storage: true }
+    }
+
+    /// Sets whether to filter out private storage slots from trace output.
+    pub fn with_filter_private_storage(mut self, filter: bool) -> Self {
+        self.filter_private_storage = filter;
+        self
     }
 
     /// Returns a list of all addresses that appeared as callers.
@@ -186,11 +194,13 @@ impl ParityTraceBuilder {
             vec![]
         };
 
+        // Save before `self` is consumed by `into_trace_results` below.
+        let filter_private_storage = self.filter_private_storage;
         let mut trace_res = self.into_trace_results(result, trace_types);
 
         // check the state diff case
         if let Some(ref mut state_diff) = trace_res.state_diff {
-            populate_state_diff(state_diff, &db, state.iter())?;
+            populate_state_diff(state_diff, &db, state.iter(), filter_private_storage)?;
         }
 
         // check the vm trace case
@@ -506,10 +516,13 @@ where
 /// It's expected that `DB` is a revm [Database](revm::database_interface::Database) which at this
 /// point already contains all the accounts that are in the state map and never has to fetch them
 /// from disk.
+/// When `filter_private_storage` is true, storage slots where `FlaggedStorage::is_private` is
+/// true are excluded from the diff.
 pub fn populate_state_diff<'a, DB, I>(
     state_diff: &mut StateDiff,
     db: DB,
     account_diffs: I,
+    filter_private_storage: bool,
 ) -> Result<(), DB::Error>
 where
     I: IntoIterator<Item = (&'a Address, &'a Account)>,
@@ -542,6 +555,9 @@ where
             // new storage values are marked as added,
             // however we're filtering changed here to avoid adding entries for the zero value
             for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed()) {
+                if filter_private_storage && slot.present_value.is_private {
+                    continue;
+                }
                 entry.storage.insert((*key).into(), Delta::Added(slot.present_value.value.into()));
             }
         } else {
@@ -556,6 +572,11 @@ where
 
             // update _changed_ storage values
             for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed()) {
+                if filter_private_storage
+                    && (slot.original_value.is_private || slot.present_value.is_private)
+                {
+                    continue;
+                }
                 entry.storage.insert(
                     (*key).into(),
                     Delta::changed(

@@ -1,10 +1,19 @@
 # Seismic REVM Inspectors
 
-Seismic's fork of [revm-inspectors](https://github.com/paradigmxyz/revm-inspectors), kept as minimal as possible. The `main` branch tracks upstream; `seismic` is the production branch.
+Seismic's fork of [revm-inspectors](https://github.com/paradigmxyz/revm-inspectors), kept as minimal as possible. The `main` branch tracks upstream; `seismic` is the default/production branch.
 
 ## What this fork does
 
-This fork exists solely to **thread `FlaggedStorage` through the tracing pipeline**. Seismic's EVM ([seismic-revm](https://github.com/SeismicSystems/seismic-revm)) uses `FlaggedStorage` instead of `U256` for storage values, attaching an `is_private` flag to each slot. The inspector code reads storage from the EVM journal, so it needs matching types.
+This fork threads `FlaggedStorage` through the tracing pipeline and provides **configurable storage filtering**. Seismic's EVM ([seismic-revm](https://github.com/SeismicSystems/seismic-revm)) uses `FlaggedStorage` instead of `U256` for storage values, attaching an `is_private` flag to each slot. The inspector code reads storage from the EVM journal, so it needs matching types.
+
+### Storage filtering (configurable)
+
+The trace builders (`GethTraceBuilder`, `ParityTraceBuilder`, `populate_state_diff`) support a `filter_private_storage` flag that omits storage slots where `FlaggedStorage::is_private` is true. This defaults to **true** (filter on), so private storage is hidden unless the caller explicitly opts out.
+
+- **seismic-reth**: uses the default (`true`) — private slots are omitted from all trace output
+- **seismic-foundry**: opts out with `.with_filter_private_storage(false)` — full traces for local debugging
+
+Private slots are omitted entirely (not zeroed out) to avoid leaking access patterns.
 
 ### JS tracer disabled
 
@@ -14,21 +23,23 @@ Re-enabling this safely would require making revm's stack use `FlaggedStorage` (
 
 The feature flag is kept in `Cargo.toml` (to avoid breaking transitive dependency chains in seismic-reth) but maps to an empty feature set — enabling it is a no-op. The JS tracer module is commented out and the source files are not compiled.
 
-### What this fork does NOT do
-
-This fork does **not** sanitize or filter trace output. No shielding, no masking, no `is_public()` checks. Traces are recorded faithfully, exactly as upstream does.
-
 ## Trace sanitization architecture
 
-Privacy-sensitive filtering of trace output happens in [seismic-reth](https://github.com/SeismicSystems/seismic-reth), not here. A centralized `sanitize_trace()` function in the RPC layer processes all trace output before returning it to callers:
+Ideally all privacy filtering would live in a single place (seismic-reth's RPC layer). However, the trace output types (`PreStateFrame`, `StateDiff`, etc.) come from `alloy-rpc-types-trace` which we don't fork — they use `B256` for storage values, so the `is_private` flag from `FlaggedStorage` is lost after the builders convert storage to output format. This means storage filtering must happen in the builders in this fork, where `FlaggedStorage` is still available.
 
-- **Storage values**: filtered by `is_public()` using the `FlaggedStorage` flag already recorded in `StorageChange`
-- **Stack/memory**: not recorded (disabled via `TracingInspectorConfig`)
-- **Calldata/returndata**: stripped or replaced with encrypted form for `TxSeismic`
+The result is a two-layer architecture:
+
+**This fork (revm-inspectors)** handles:
+- **Storage values**: filtered by `is_private` via the configurable `filter_private_storage` flag on builders.
+
+**seismic-reth RPC layer** handles everything else:
+- **Stack/memory**: not recorded (disabled via `TracingInspectorConfig` with `record_stack_snapshots: false`, `record_memory_snapshots: false`)
+- **Calldata/returndata**: stripped or replaced with encrypted form for `TxSeismic` transactions
+- **VM trace payloads**: push values, memory deltas, storage deltas stripped from `VmExecutedOperation`
 - **Logs**: passed through (public by design)
-- **JS tracer**: disabled at the feature level (this fork) and compile-time (seismic-reth)
+- **Gas/opcodes**: passed through
 
-Because the inspectors record traces faithfully (no filtering here), `sforge` and other foundry tools get full unredacted traces during local development, which is helpful for debugging - there's no privacy to protect on a local devnet anyways.
+The split follows data availability — storage filtering happens here where `FlaggedStorage` is available, while calldata/returndata sanitization happens in seismic-reth where the original `TransactionSigned` (with encrypted calldata) is available.
 
 ## Users
 

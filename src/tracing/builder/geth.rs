@@ -31,19 +31,35 @@ use revm::{
 pub struct GethTraceBuilder<'a> {
     /// Recorded trace nodes.
     nodes: Cow<'a, [CallTraceNode]>,
+    /// Whether to exclude private storage slots from trace output.
+    /// When true (default), storage slots where `FlaggedStorage::is_private` is true are omitted.
+    /// Foundry can set filter_private_storage=false to see everything during local dev.
+    // Alternatives considered for filtering behavior:
+    //   1. Zero out value but keep the slot key — reveals which slots are private and which were
+    //      accessed (leaks access patterns, e.g. confirms a mapping entry exists)
+    //   2. Zero out value without privacy flag — attacker can't distinguish private from
+    //      uninitialized, but still leaks the access pattern
+    //   3. Omit entirely (chosen) — no information leaks about private storage
+    filter_private_storage: bool,
 }
 
 impl GethTraceBuilder<'static> {
     /// Returns a new instance of the builder from [`Cow::Owned`]
     pub fn new(nodes: Vec<CallTraceNode>) -> GethTraceBuilder<'static> {
-        Self { nodes: Cow::Owned(nodes) }
+        Self { nodes: Cow::Owned(nodes), filter_private_storage: true }
     }
 }
 
 impl<'a> GethTraceBuilder<'a> {
     /// Returns a new instance of the builder from [`Cow::Borrowed`]
     pub fn new_borrowed(nodes: &'a [CallTraceNode]) -> GethTraceBuilder<'a> {
-        Self { nodes: Cow::Borrowed(nodes) }
+        Self { nodes: Cow::Borrowed(nodes), filter_private_storage: true }
+    }
+
+    /// Sets whether to filter out private storage slots from trace output.
+    pub fn with_filter_private_storage(mut self, filter: bool) -> Self {
+        self.filter_private_storage = filter;
+        self
     }
 
     /// Consumes the builder and returns the recorded trace nodes.
@@ -263,6 +279,9 @@ impl<'a> GethTraceBuilder<'a> {
             // insert the original value of all modified storage slots
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter() {
+                    if self.filter_private_storage && slot.original_value.is_private {
+                        continue;
+                    }
                     acc_state.storage.insert((*key).into(), slot.original_value.value.into());
                 }
             }
@@ -302,6 +321,11 @@ impl<'a> GethTraceBuilder<'a> {
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed())
                 {
+                    if self.filter_private_storage
+                        && (slot.original_value.is_private || slot.present_value.is_private)
+                    {
+                        continue;
+                    }
                     pre_state.storage.insert((*key).into(), slot.original_value.value.into());
                     post_state.storage.insert((*key).into(), slot.present_value.value.into());
                 }
