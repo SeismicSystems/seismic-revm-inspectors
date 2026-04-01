@@ -4,8 +4,8 @@
 //! Storage filtering is handled upstream in revm-inspectors builders via
 //! `filter_private_storage` (defaults to true). This module handles everything else:
 //!
-//! - Calldata: stripped from all frames (callers already know their own calldata;
-//!   for regular txs it's available via eth_getTransactionByHash)
+//! - Calldata: stripped from all frames (callers already know their own calldata; for regular txs
+//!   it's available via eth_getTransactionByHash)
 //! - Return data: stripped from all frames
 //! - VM trace payloads: push values, memory deltas, storage deltas stripped
 //! - Stack/memory: should already be disabled via TracingInspectorConfig
@@ -24,14 +24,9 @@ use alloy_rpc_types_trace::{
 pub fn sanitize_geth_trace(trace: GethTrace) -> GethTrace {
     match trace {
         GethTrace::Default(frame) => GethTrace::Default(sanitize_default_frame(frame)),
-        GethTrace::CallTracer(frame) => {
-            GethTrace::CallTracer(sanitize_call_frame(frame))
-        }
+        GethTrace::CallTracer(frame) => GethTrace::CallTracer(sanitize_call_frame(frame)),
         GethTrace::FlatCallTracer(frames) => GethTrace::FlatCallTracer(
-            frames
-                .into_iter()
-                .map(sanitize_localized_transaction_trace)
-                .collect(),
+            frames.into_iter().map(sanitize_localized_transaction_trace).collect(),
         ),
         GethTrace::PreStateTracer(frame) => {
             // Storage already filtered by builders. Nothing else to strip.
@@ -44,10 +39,7 @@ pub fn sanitize_geth_trace(trace: GethTrace) -> GethTrace {
         }
         GethTrace::NoopTracer(frame) => GethTrace::NoopTracer(frame),
         GethTrace::MuxTracer(mux) => GethTrace::MuxTracer(MuxFrame(
-            mux.0
-                .into_iter()
-                .map(|(k, v)| (k, sanitize_geth_trace(v)))
-                .collect(),
+            mux.0.into_iter().map(|(k, v)| (k, sanitize_geth_trace(v))).collect(),
         )),
         // JS tracer is disabled, ERC-7562 is not reachable.
         // Default to stripping: return an empty noop trace for any unknown/future variant.
@@ -144,11 +136,7 @@ pub fn sanitize_trace_results(mut results: TraceResults) -> TraceResults {
     results.output = Bytes::new();
 
     // Sanitize call traces.
-    results.trace = results
-        .trace
-        .into_iter()
-        .map(sanitize_transaction_trace)
-        .collect();
+    results.trace = results.trace.into_iter().map(sanitize_transaction_trace).collect();
 
     // Sanitize VM trace.
     if let Some(vm_trace) = results.vm_trace {
