@@ -53,6 +53,8 @@ mod writer;
 #[cfg(feature = "std")]
 pub use writer::{TraceWriter, TraceWriterConfig};
 
+pub mod trace_sanitizer;
+
 // JS tracer removed: it gives caller-supplied JavaScript arbitrary live access to
 // stack, memory, and storage during execution, which is incompatible with Seismic's
 // privacy model. We could reenable this in the future if we make revm's stack hold FlaggedStorage
