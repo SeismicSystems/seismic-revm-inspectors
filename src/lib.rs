@@ -18,6 +18,14 @@
 
 extern crate alloc;
 
+// Pinned deps to constrain resolution — not directly used
+use alloy_consensus as _;
+use alloy_consensus_any as _;
+use alloy_eips as _;
+use alloy_network_primitives as _;
+use alloy_serde as _;
+use alloy_tx_macros as _;
+
 /// An inspector implementation for an EIP2930 Accesslist
 pub mod access_list;
 

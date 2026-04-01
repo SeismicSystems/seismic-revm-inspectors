@@ -841,7 +841,7 @@ impl EvmDbRef {
                 ))))
             }
         };
-        to_uint8_array(B256::from(value), ctx)
+        to_uint8_array(B256::from(U256::from(value.value)), ctx)
     }
 
     pub(crate) fn into_js_object(self, ctx: &mut Context) -> JsResult<JsObject> {
