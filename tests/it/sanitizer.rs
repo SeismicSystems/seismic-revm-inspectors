@@ -518,3 +518,111 @@ fn test_sanitize_trace_results_vec() {
     let TraceResult::Error { ref error, .. } = sanitized[1] else { panic!("expected Error") };
     assert_eq!(error, "out of gas");
 }
+
+// ──────────────────── Parity: Selfdestruct action passthrough ─────────────────
+
+#[test]
+fn test_sanitize_localized_trace_selfdestruct() {
+    use alloy_rpc_types_trace::parity::SelfdestructAction;
+
+    let trace = LocalizedTransactionTrace {
+        trace: TransactionTrace {
+            action: Action::Selfdestruct(SelfdestructAction {
+                address: address!("0x0000000000000000000000000000000000000001"),
+                refund_address: address!("0x0000000000000000000000000000000000000002"),
+                balance: U256::from(1000),
+            }),
+            result: None,
+            subtraces: 0,
+            trace_address: vec![0],
+            ..Default::default()
+        },
+        block_hash: None,
+        block_number: None,
+        transaction_hash: None,
+        transaction_position: None,
+    };
+
+    let sanitized = sanitize_localized_transaction_trace(trace);
+
+    let Action::Selfdestruct(ref sd) = sanitized.trace.action else {
+        panic!("expected Selfdestruct")
+    };
+    assert_eq!(
+        sd.address,
+        address!("0x0000000000000000000000000000000000000001"),
+        "address preserved"
+    );
+    assert_eq!(
+        sd.refund_address,
+        address!("0x0000000000000000000000000000000000000002"),
+        "refund_address preserved"
+    );
+    assert_eq!(sd.balance, U256::from(1000), "balance preserved");
+}
+
+// ──────────────── VmTrace: nested sub-trace recursive sanitization ────────────
+
+#[test]
+fn test_sanitize_vm_trace_nested_sub() {
+    let results = TraceResults {
+        output: Bytes::new(),
+        state_diff: None,
+        trace: vec![],
+        vm_trace: Some(VmTrace {
+            code: Bytes::from(vec![0x60]),
+            ops: vec![VmInstruction {
+                cost: 3,
+                pc: 0,
+                ex: Some(VmExecutedOperation {
+                    used: 97,
+                    push: vec![U256::from(1)],
+                    mem: None,
+                    store: Some(alloy_rpc_types_trace::parity::StorageDelta {
+                        key: U256::from(1),
+                        val: U256::from(2),
+                    }),
+                }),
+                // Nested sub-trace with its own instructions
+                sub: Some(VmTrace {
+                    code: Bytes::from(vec![0x61]),
+                    ops: vec![VmInstruction {
+                        cost: 5,
+                        pc: 0,
+                        ex: Some(VmExecutedOperation {
+                            used: 50,
+                            push: vec![U256::from(99)],
+                            mem: Some(alloy_rpc_types_trace::parity::MemoryDelta {
+                                off: 0,
+                                data: Bytes::from(vec![0xaa, 0xbb]),
+                            }),
+                            store: None,
+                        }),
+                        sub: None,
+                        op: Some("PUSH2".to_string()),
+                        idx: None,
+                    }],
+                }),
+                op: Some("CALL".to_string()),
+                idx: None,
+            }],
+        }),
+    };
+
+    let sanitized = sanitize_trace_results(results);
+
+    let vm = sanitized.vm_trace.as_ref().unwrap();
+
+    // Top-level instruction sanitized
+    let top_ex = vm.ops[0].ex.as_ref().unwrap();
+    assert!(top_ex.push.is_empty(), "top push stripped");
+    assert!(top_ex.store.is_none(), "top store stripped");
+
+    // Nested sub-trace also sanitized
+    let sub = vm.ops[0].sub.as_ref().unwrap();
+    assert_eq!(sub.code, Bytes::from(vec![0x61]), "sub code preserved");
+    let sub_ex = sub.ops[0].ex.as_ref().unwrap();
+    assert!(sub_ex.push.is_empty(), "nested push stripped");
+    assert!(sub_ex.mem.is_none(), "nested mem stripped");
+    assert_eq!(sub_ex.used, 50, "nested used preserved");
+}
