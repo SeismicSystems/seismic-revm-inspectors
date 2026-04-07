@@ -41,9 +41,13 @@ pub fn sanitize_geth_trace(trace: GethTrace) -> GethTrace {
         GethTrace::MuxTracer(mux) => GethTrace::MuxTracer(MuxFrame(
             mux.0.into_iter().map(|(k, v)| (k, sanitize_geth_trace(v))).collect(),
         )),
-        // JS tracer is disabled, ERC-7562 is not reachable.
         // Default to stripping: return an empty noop trace for any unknown/future variant.
         // This ensures new tracer types added by upstream alloy don't silently leak data.
+        // In particular, this disables the very powerful JS tracer is disabled.
+        // The ERC-7562 tracer is also currently not even part of the GethTrace enum on the version
+        // of alloy we pull in. Make sure to also not wire up `geth_erc7562_traces` in the
+        // future, since that tracer is also too powerful and could expose private data if
+        // used.
         _ => GethTrace::NoopTracer(Default::default()),
     }
 }

@@ -385,6 +385,9 @@ impl<'a> GethTraceBuilder<'a> {
     }
 
     /// Traces ERC-7562 calls using the call tracer.
+    /// Seismic note: we leave this here in case it's useful in foundry or for local development,
+    /// but this should NEVER be used in our production reth instance.
+    /// It is currently explicitly disabled in `sanitize_geth_trace`.
     pub fn geth_erc7562_traces<DB: DatabaseRef>(
         &self,
         opts: Erc7562Config,
