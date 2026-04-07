@@ -233,7 +233,6 @@ fn test_parity_call_selfdestruct() {
             input: input.into(),
             to,
             value: U256::ZERO,
-            // tx_type: 0,
         })
     );
     assert_eq!(
@@ -363,7 +362,7 @@ fn test_parity_statediff_blob_commit() {
         evm.inspector.into_parity_builder().into_trace_results(&res.result, &trace_types);
 
     let state_diff = full_trace.state_diff.as_mut().unwrap();
-    populate_state_diff(state_diff, db, res.state.iter()).unwrap();
+    populate_state_diff(state_diff, db, res.state.iter(), false).unwrap();
 
     assert!(!state_diff.contains_key(&to));
     assert!(state_diff.contains_key(&caller));

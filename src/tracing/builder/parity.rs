@@ -23,6 +23,8 @@ use revm::{
 pub struct ParityTraceBuilder {
     /// Recorded trace nodes
     nodes: Vec<CallTraceNode>,
+    /// Whether to exclude private storage slots from trace output.
+    filter_private_storage: bool,
 }
 
 impl ParityTraceBuilder {
@@ -32,7 +34,13 @@ impl ParityTraceBuilder {
         _spec_id: Option<SpecId>,
         _config: TracingInspectorConfig,
     ) -> Self {
-        Self { nodes }
+        Self { nodes, filter_private_storage: true }
+    }
+
+    /// Sets whether to filter out private storage slots from trace output.
+    pub fn with_filter_private_storage(mut self, filter: bool) -> Self {
+        self.filter_private_storage = filter;
+        self
     }
 
     /// Returns a list of all addresses that appeared as callers.
@@ -122,16 +130,7 @@ impl ParityTraceBuilder {
         self,
         info: TransactionInfo,
     ) -> impl Iterator<Item = LocalizedTransactionTrace> {
-        self.into_localized_transaction_traces_iter_with_shielding(info, true)
-    }
-
-    /// Returns an iterator over all recorded traces  for `trace_transaction` with masking
-    pub fn into_localized_transaction_traces_iter_with_shielding(
-        self,
-        info: TransactionInfo,
-        mask_outputs: bool,
-    ) -> impl Iterator<Item = LocalizedTransactionTrace> {
-        self.into_transaction_traces_iter_with_shielding(mask_outputs).map(move |trace| {
+        self.into_transaction_traces_iter().map(move |trace| {
             let TransactionInfo { hash, index, block_hash, block_number, .. } = info;
             LocalizedTransactionTrace {
                 trace,
@@ -149,15 +148,6 @@ impl ParityTraceBuilder {
         info: TransactionInfo,
     ) -> Vec<LocalizedTransactionTrace> {
         self.into_localized_transaction_traces_iter(info).collect()
-    }
-
-    /// Returns all recorded traces for `trace_transaction` with masking
-    pub fn into_localized_transaction_traces_with_shielding(
-        self,
-        info: TransactionInfo,
-        mask_outputs: bool,
-    ) -> Vec<LocalizedTransactionTrace> {
-        self.into_localized_transaction_traces_iter_with_shielding(info, mask_outputs).collect()
     }
 
     /// Consumes the inspector and returns the trace results according to the configured trace
@@ -204,11 +194,13 @@ impl ParityTraceBuilder {
             vec![]
         };
 
+        // Save before `self` is consumed by `into_trace_results` below.
+        let filter_private_storage = self.filter_private_storage;
         let mut trace_res = self.into_trace_results(result, trace_types);
 
         // check the state diff case
         if let Some(ref mut state_diff) = trace_res.state_diff {
-            populate_state_diff(state_diff, &db, state.iter())?;
+            populate_state_diff(state_diff, &db, state.iter(), filter_private_storage)?;
         }
 
         // check the vm trace case
@@ -254,21 +246,13 @@ impl ParityTraceBuilder {
     /// Selfdestructs appear as individual [`TransactionTrace`] instance but selfdestructs are
     /// tracked as metadata of the recorded nodes.
     fn transaction_traces(&self) -> Vec<TransactionTrace> {
-        self.transaction_traces_with_shielding(false)
-    }
-
-    fn transaction_traces_with_shielding(&self, shield_output: bool) -> Vec<TransactionTrace> {
         let mut traces = Vec::with_capacity(self.nodes.len());
         // Boolean marker to track if sorting for selfdestruct is needed
         let mut sorting_selfdestruct = false;
 
-        for (index, node) in self.iter_traceable_nodes().enumerate() {
+        for node in self.iter_traceable_nodes() {
             let trace_address = self.trace_address(node.idx);
-            // Only the first trace (root call) gets the shield_output flag
-            let trace = node.parity_transaction_trace_with_shielding(
-                trace_address,
-                shield_output && index == 0,
-            );
+            let trace = node.parity_transaction_trace(trace_address);
             traces.push(trace);
 
             if node.is_selfdestruct() {
@@ -300,15 +284,6 @@ impl ParityTraceBuilder {
 
     /// Returns an iterator over all recorded traces  for `trace_transaction`
     pub fn into_transaction_traces_iter(self) -> impl Iterator<Item = TransactionTrace> {
-        self.into_transaction_traces_iter_with_shielding(false)
-    }
-
-    /// SHIELDED TRACE: Returns an iterator over all recorded traces for `trace_transaction` with
-    /// shielding
-    pub fn into_transaction_traces_iter_with_shielding(
-        self,
-        mask_outputs: bool,
-    ) -> impl Iterator<Item = TransactionTrace> {
         let trace_addresses = self.trace_addresses();
         TransactionTraceIter {
             next_selfdestructs: Default::default(),
@@ -316,17 +291,8 @@ impl ParityTraceBuilder {
                 .nodes
                 .into_iter()
                 .zip(trace_addresses)
-                .enumerate()
-                .filter(|(_, (node, _))| !node.is_precompile())
-                .map(move |(index, (node, trace_address))| {
-                    // Only the first trace (root call) gets the shield_output flag when
-                    // mask_outputs is true
-                    let shield_output = mask_outputs && index == 0;
-                    (
-                        node.parity_transaction_trace_with_shielding(trace_address, shield_output),
-                        node,
-                    )
-                })
+                .filter(|(node, _)| !node.is_precompile())
+                .map(|(node, trace_address)| (node.parity_transaction_trace(trace_address), node))
                 .peekable(),
         }
     }
@@ -423,7 +389,7 @@ impl ParityTraceBuilder {
     ) -> VmInstruction {
         let maybe_storage = step.storage_change.map(|storage_change| StorageDelta {
             key: storage_change.key,
-            val: storage_change.value.value.into(),
+            val: storage_change.value.value,
         });
 
         let maybe_memory = step
@@ -550,10 +516,13 @@ where
 /// It's expected that `DB` is a revm [Database](revm::database_interface::Database) which at this
 /// point already contains all the accounts that are in the state map and never has to fetch them
 /// from disk.
+/// When `filter_private_storage` is true, storage slots where `FlaggedStorage::is_private` is
+/// true are excluded from the diff.
 pub fn populate_state_diff<'a, DB, I>(
     state_diff: &mut StateDiff,
     db: DB,
     account_diffs: I,
+    filter_private_storage: bool,
 ) -> Result<(), DB::Error>
 where
     I: IntoIterator<Item = (&'a Address, &'a Account)>,
@@ -586,6 +555,9 @@ where
             // new storage values are marked as added,
             // however we're filtering changed here to avoid adding entries for the zero value
             for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed()) {
+                if filter_private_storage && slot.present_value.is_private {
+                    continue;
+                }
                 entry.storage.insert((*key).into(), Delta::Added(slot.present_value.value.into()));
             }
         } else {
@@ -600,6 +572,11 @@ where
 
             // update _changed_ storage values
             for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed()) {
+                if filter_private_storage
+                    && (slot.original_value.is_private || slot.present_value.is_private)
+                {
+                    continue;
+                }
                 entry.storage.insert(
                     (*key).into(),
                     Delta::changed(

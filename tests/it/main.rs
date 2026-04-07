@@ -18,3 +18,9 @@ mod test_native_bigint;
 mod transfer;
 #[cfg(feature = "std")]
 mod writer;
+
+// Seismic Tests
+#[cfg(feature = "std")]
+mod flagged_storage;
+#[cfg(feature = "std")]
+mod sanitizer;

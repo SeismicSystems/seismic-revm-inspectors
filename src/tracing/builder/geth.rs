@@ -31,19 +31,35 @@ use revm::{
 pub struct GethTraceBuilder<'a> {
     /// Recorded trace nodes.
     nodes: Cow<'a, [CallTraceNode]>,
+    /// Whether to exclude private storage slots from trace output.
+    /// When true (default), storage slots where `FlaggedStorage::is_private` is true are omitted.
+    /// Foundry can set filter_private_storage=false to see everything during local dev.
+    // Alternatives considered for filtering behavior:
+    //   1. Zero out value but keep the slot key — reveals which slots are private and which were
+    //      accessed (leaks access patterns, e.g. confirms a mapping entry exists)
+    //   2. Zero out value without privacy flag — attacker can't distinguish private from
+    //      uninitialized, but still leaks the access pattern
+    //   3. Omit entirely (chosen) — no information leaks about private storage
+    filter_private_storage: bool,
 }
 
 impl GethTraceBuilder<'static> {
     /// Returns a new instance of the builder from [`Cow::Owned`]
     pub fn new(nodes: Vec<CallTraceNode>) -> GethTraceBuilder<'static> {
-        Self { nodes: Cow::Owned(nodes) }
+        Self { nodes: Cow::Owned(nodes), filter_private_storage: true }
     }
 }
 
 impl<'a> GethTraceBuilder<'a> {
     /// Returns a new instance of the builder from [`Cow::Borrowed`]
     pub fn new_borrowed(nodes: &'a [CallTraceNode]) -> GethTraceBuilder<'a> {
-        Self { nodes: Cow::Borrowed(nodes) }
+        Self { nodes: Cow::Borrowed(nodes), filter_private_storage: true }
+    }
+
+    /// Sets whether to filter out private storage slots from trace output.
+    pub fn with_filter_private_storage(mut self, filter: bool) -> Self {
+        self.filter_private_storage = filter;
+        self
     }
 
     /// Consumes the builder and returns the recorded trace nodes.
@@ -152,8 +168,7 @@ impl<'a> GethTraceBuilder<'a> {
         let include_logs = opts.with_log.unwrap_or_default();
         // first fill up the root
         let main_trace_node = &self.nodes[0];
-        let mut root_call_frame =
-            main_trace_node.geth_empty_call_frame_with_shielding(include_logs, true);
+        let mut root_call_frame = main_trace_node.geth_empty_call_frame(include_logs);
         root_call_frame.gas_used = U256::from(gas_used);
 
         // selfdestructs are not recorded as individual call traces but are derived from
@@ -175,8 +190,7 @@ impl<'a> GethTraceBuilder<'a> {
         for (idx, trace) in self.nodes.iter().enumerate().skip(1) {
             // include logs only if call and all its parents were successful
             let include_logs = include_logs && !self.call_or_parent_failed(trace);
-            call_frames
-                .push((idx, trace.geth_empty_call_frame_with_shielding(include_logs, false)));
+            call_frames.push((idx, trace.geth_empty_call_frame(include_logs)));
 
             // selfdestructs are not recorded as individual call traces but are derived from
             // the call trace and are added as additional `CallFrame` objects
@@ -262,15 +276,13 @@ impl<'a> GethTraceBuilder<'a> {
             let code = code_enabled.then(|| load_account_code(&db, &db_acc)).flatten();
             let mut acc_state = AccountState::from_account_info(db_acc.nonce, db_acc.balance, code);
 
+            // insert the original value of all modified storage slots
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter() {
-                    if slot.original_value.is_public() {
-                        acc_state.storage.insert((*key).into(), slot.original_value.value.into());
+                    if self.filter_private_storage && slot.original_value.is_private {
+                        continue;
                     }
-                    // SHIELDED TRACE: Choosing to not even show the storage changes for private
-                    // storage slots else {
-                    //     acc_state.storage.insert((*key).into(), B256::ZERO);
-                    // }
+                    acc_state.storage.insert((*key).into(), slot.original_value.value.into());
                 }
             }
 
@@ -309,20 +321,13 @@ impl<'a> GethTraceBuilder<'a> {
             if storage_enabled {
                 for (key, slot) in changed_acc.storage.iter().filter(|(_, slot)| slot.is_changed())
                 {
-                    if slot.original_value.is_public() {
-                        pre_state.storage.insert((*key).into(), slot.original_value.value.into());
+                    if self.filter_private_storage
+                        && (slot.original_value.is_private || slot.present_value.is_private)
+                    {
+                        continue;
                     }
-                    // SHIELDED TRACE: don't show shielded storage changes
-                    // else {
-                    //     pre_state.storage.insert((*key).into(), B256::ZERO);
-                    // }
-
-                    if slot.present_value.is_public() {
-                        post_state.storage.insert((*key).into(), slot.present_value.value.into());
-                    }
-                    // else {
-                    //     post_state.storage.insert((*key).into(), B256::ZERO);
-                    // }
+                    pre_state.storage.insert((*key).into(), slot.original_value.value.into());
+                    post_state.storage.insert((*key).into(), slot.present_value.value.into());
                 }
             }
 
@@ -380,6 +385,9 @@ impl<'a> GethTraceBuilder<'a> {
     }
 
     /// Traces ERC-7562 calls using the call tracer.
+    /// Seismic note: we leave this here in case it's useful in foundry or for local development,
+    /// but this should NEVER be used in our production reth instance.
+    /// It is currently explicitly disabled in `sanitize_geth_trace`.
     pub fn geth_erc7562_traces<DB: DatabaseRef>(
         &self,
         opts: Erc7562Config,

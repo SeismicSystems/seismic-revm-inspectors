@@ -527,8 +527,8 @@ impl<W: Write> TraceWriter<W> {
                     self.writer,
                     "  @ {key}: {value_before} → {value_after}",
                     key = num_or_hex(key),
-                    value_before = num_or_hex_value(value_before),
-                    value_after = num_or_hex_value(value_after),
+                    value_before = num_or_hex_flagged(value_before),
+                    value_after = num_or_hex_flagged(value_after),
                 )?;
             }
         }
@@ -547,16 +547,13 @@ fn use_colors(choice: ColorChoice) -> bool {
 }
 
 /// Formats the given FlaggedStorage as a decimal number if it is short, otherwise as a hexadecimal
-/// byte-array.
-fn num_or_hex_value(x: revm::primitives::FlaggedStorage) -> String {
+/// byte-array. Includes the privacy flag (useful for foundry trace output during local
+/// development). For production traces, reth will filter and zero out the output.
+fn num_or_hex_flagged(x: alloy_primitives::FlaggedStorage) -> String {
     format!(
         "{value}, {flag}",
-        value = if x.value < U256::from(1e6 as u128) {
-            x.value.to_string()
-        } else {
-            B256::from(x.value).to_string()
-        },
-        flag = x.is_private
+        value = num_or_hex(x.value),
+        flag = if x.is_private { "private" } else { "public" }
     )
 }
 
