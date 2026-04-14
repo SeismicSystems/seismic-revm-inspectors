@@ -57,13 +57,11 @@ Private slots are omitted entirely (not zeroed out) to avoid leaking access patt
 The trace output types (`PreStateFrame`, `StateDiff`, etc.) come from `alloy-rpc-types-trace` which we don't fork — they use `B256` for storage values, so the `is_private` flag from `FlaggedStorage` is lost after the builders convert storage to output format.
 Storage filtering must happen in the builders where `FlaggedStorage` is still available.
 
-### JS tracer disabled
+### JS tracer dangerous
 
-The upstream `js-tracer` feature allows callers to supply arbitrary JavaScript that runs *during* EVM execution with live access to `log.stack.peek()`, `log.memory.slice()`, and `db.getState()`. This hands private data to untrusted code in real time — no post-processing sanitizer can help.
+The `js-tracer` feature allows callers to supply arbitrary JavaScript that runs *during* EVM execution with live access to `log.stack.peek()`, `log.memory.slice()`, and `db.getState()`. This hands private data to untrusted code in real time — no post-processing sanitizer can help.
 
-Re-enabling this safely would require making revm's stack use `FlaggedStorage` (taint tracking), so the JS tracer's stack/memory/storage APIs could filter private values before handing them to user code. That's a large engineering lift (every opcode handler needs taint propagation) and not planned currently.
-
-The feature flag is kept in `Cargo.toml` (to avoid breaking transitive dependency chains in seismic-reth) but maps to an empty feature set — enabling it is a no-op. The JS tracer module is commented out and the source files are not compiled.
+We keep this feature in case it is useful for foundry users to debug, but note that this should never be enabled on reth. Making this work safely would require making revm's stack use `FlaggedStorage` (taint tracking), so the JS tracer's stack/memory/storage APIs could filter private values before handing them to user code. That's a large engineering lift (every opcode handler needs taint propagation) and not planned currently.
 
 ### ERC-7562 tracer not available
 
