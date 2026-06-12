@@ -8,6 +8,7 @@ use alloy_rpc_types_trace::{
     geth::{
         mux::MuxFrame, CallFrame, DefaultFrame, FourByteFrame, GethTrace, StructLog, TraceResult,
     },
+    otterscan::TraceEntry,
     parity::{
         Action, CallAction, CallOutput, CallType, CreateAction, CreationMethod,
         LocalizedTransactionTrace, StateDiff, TraceOutput, TraceResults,
@@ -16,8 +17,9 @@ use alloy_rpc_types_trace::{
     },
 };
 use revm_inspectors::tracing::trace_sanitizer::{
-    sanitize_geth_trace, sanitize_localized_transaction_trace, sanitize_trace_results,
-    sanitize_trace_results_vec, sanitize_trace_results_with_hash,
+    sanitize_geth_trace, sanitize_localized_transaction_trace, sanitize_revert_output,
+    sanitize_trace_entries, sanitize_trace_results, sanitize_trace_results_vec,
+    sanitize_trace_results_with_hash,
 };
 use std::collections::BTreeMap;
 
@@ -625,4 +627,86 @@ fn test_sanitize_vm_trace_nested_sub() {
     assert!(sub_ex.push.is_empty(), "nested push stripped");
     assert!(sub_ex.mem.is_none(), "nested mem stripped");
     assert_eq!(sub_ex.used, 50, "nested used preserved");
+}
+
+// ───────────────────────────── Geth: revert reason ────────────────────────────
+
+#[test]
+fn test_sanitize_call_frame_revert_reason() {
+    let frame = CallFrame {
+        input: Bytes::from(vec![0xde, 0xad]),
+        output: Some(Bytes::from(vec![0xca, 0xfe])),
+        error: Some("execution reverted".to_string()),
+        revert_reason: Some("InsufficientBalance(1337)".to_string()),
+        typ: "CALL".to_string(),
+        calls: vec![CallFrame {
+            error: Some("execution reverted".to_string()),
+            revert_reason: Some("secret reason".to_string()),
+            typ: "CALL".to_string(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let sanitized = sanitize_geth_trace(GethTrace::CallTracer(frame));
+    let GethTrace::CallTracer(f) = sanitized else { panic!("expected CallTracer") };
+
+    assert!(f.revert_reason.is_none(), "revert_reason is decoded return data, must be stripped");
+    assert_eq!(f.error.as_deref(), Some("execution reverted"), "generic error string preserved");
+    assert!(f.calls[0].revert_reason.is_none(), "nested revert_reason must be stripped");
+    assert_eq!(f.calls[0].error.as_deref(), Some("execution reverted"));
+}
+
+// ───────────────────────────── Otterscan: TraceEntry ──────────────────────────
+
+#[test]
+fn test_sanitize_trace_entries() {
+    let entries = vec![
+        TraceEntry {
+            r#type: "CALL".to_string(),
+            depth: 0,
+            from: address!("0x0000000000000000000000000000000000000001"),
+            to: address!("0x0000000000000000000000000000000000000002"),
+            value: Some(U256::from(42)),
+            input: Bytes::from(vec![0xde, 0xad, 0xbe, 0xef]),
+            output: Bytes::from(vec![0xca, 0xfe]),
+        },
+        // Nested frame, e.g. a shielded value passed between contracts or a
+        // precompile decrypt result.
+        TraceEntry {
+            r#type: "STATICCALL".to_string(),
+            depth: 1,
+            from: address!("0x0000000000000000000000000000000000000002"),
+            to: address!("0x0000000000000000000000000000000000000003"),
+            value: Some(U256::ZERO),
+            input: Bytes::from(vec![0x11, 0x22]),
+            output: Bytes::from(vec![0x33, 0x44]),
+        },
+    ];
+
+    let sanitized = sanitize_trace_entries(entries);
+
+    assert_eq!(sanitized.len(), 2);
+    for entry in &sanitized {
+        assert!(entry.input.is_empty(), "input must be stripped");
+        assert!(entry.output.is_empty(), "output must be stripped");
+    }
+
+    // Call metadata preserved
+    assert_eq!(sanitized[0].r#type, "CALL");
+    assert_eq!(sanitized[0].depth, 0);
+    assert_eq!(sanitized[0].from, address!("0x0000000000000000000000000000000000000001"));
+    assert_eq!(sanitized[0].to, address!("0x0000000000000000000000000000000000000002"));
+    assert_eq!(sanitized[0].value, Some(U256::from(42)));
+    assert_eq!(sanitized[1].r#type, "STATICCALL");
+    assert_eq!(sanitized[1].depth, 1);
+}
+
+// ───────────────────────────── Otterscan: revert output ───────────────────────
+
+#[test]
+fn test_sanitize_revert_output() {
+    let revert_payload = Bytes::from(vec![0x08, 0xc3, 0x79, 0xa0, 0x01, 0x02, 0x03]);
+    assert!(sanitize_revert_output(revert_payload).is_empty(), "revert payload must be stripped");
+    assert!(sanitize_revert_output(Bytes::new()).is_empty());
 }
