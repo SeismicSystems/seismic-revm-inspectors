@@ -53,6 +53,8 @@ mod writer;
 #[cfg(feature = "std")]
 pub use writer::{TraceWriter, TraceWriterConfig};
 
+pub mod trace_sanitizer;
+
 #[cfg(feature = "js-tracer")]
 pub mod js;
 

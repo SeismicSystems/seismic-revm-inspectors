@@ -841,7 +841,7 @@ impl EvmDbRef {
                 ))))
             }
         };
-        to_uint8_array(B256::from(value), ctx)
+        to_uint8_array(B256::from(U256::from(value.value)), ctx)
     }
 
     pub(crate) fn into_js_object(self, ctx: &mut Context) -> JsResult<JsObject> {
@@ -984,7 +984,11 @@ where
         self.0.code_by_hash_ref(_code_hash).map_err(|e| e.to_string().into())
     }
 
-    fn storage_ref(&self, _address: Address, _index: U256) -> Result<U256, Self::Error> {
+    fn storage_ref(
+        &self,
+        _address: Address,
+        _index: U256,
+    ) -> Result<alloy_primitives::FlaggedStorage, Self::Error> {
         self.0.storage_ref(_address, _index).map_err(|e| e.to_string().into())
     }
 

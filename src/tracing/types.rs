@@ -8,8 +8,8 @@ use alloc::{
     string::{String, ToString},
     vec::Vec,
 };
-pub use alloy_primitives::Log;
 use alloy_primitives::{Address, Bytes, FixedBytes, LogData, U256};
+pub use alloy_primitives::{FlaggedStorage, Log};
 use alloy_rpc_types_trace::{
     geth::{CallFrame, CallLogFrame, GethDefaultTracingOptions, StructLog},
     parity::{
@@ -781,9 +781,9 @@ pub struct StorageChange {
     /// key of the storage slot
     pub key: U256,
     /// Current value of the storage slot
-    pub value: U256,
+    pub value: FlaggedStorage,
     /// The previous value of the storage slot, if any
-    pub had_value: Option<U256>,
+    pub had_value: Option<FlaggedStorage>,
     /// How this storage was accessed
     pub reason: StorageChangeReason,
 }

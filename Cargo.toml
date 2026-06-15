@@ -1,12 +1,12 @@
 [package]
 name = "revm-inspectors"
-description = "Revm inspector implementations"
+description = "Seismic Revm inspector implementations"
 version = "0.29.0"
 edition = "2021"
 rust-version = "1.86.0"
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/paradigmxyz/revm-inspectors"
-repository = "https://github.com/paradigmxyz/revm-inspectors"
+homepage = "https://github.com/SeismicSystems/seismic-revm-inspectors"
+repository = "https://github.com/SeismicSystems/seismic-revm-inspectors"
 categories = ["cryptography"]
 keywords = ["ethereum", "evm", "inspectors", "tracing", "debugging"]
 exclude = [
@@ -30,8 +30,8 @@ clippy.lint_groups_priority = "allow"
 
 [dependencies]
 # eth
-alloy-rpc-types-eth = { version = "1.0.22", default-features = false }
-alloy-rpc-types-trace = { version = "1.0.22", default-features = false }
+alloy-rpc-types-eth = { version = "=1.1.0", default-features = false }
+alloy-rpc-types-trace = { version = "=1.1.0", default-features = false }
 alloy-sol-types = { version = "1.2", default-features = false }
 alloy-primitives = { version = "1.2", default-features = false, features = [
     "map",
@@ -41,6 +41,14 @@ revm = { version = "29.0.0", default-features = false }
 anstyle = { version = "1.0", optional = true }
 colorchoice = "1.0"
 thiserror = { version = "2.0", default-features = false }
+
+# Pin alloy transitive deps to match reth
+alloy-consensus = { version = "=1.1.0", default-features = false }
+alloy-eips = { version = "=1.1.0", default-features = false }
+alloy-network-primitives = { version = "=1.1.0", default-features = false }
+alloy-consensus-any = { version = "=1.1.0", default-features = false }
+alloy-serde = { version = "=1.1.0", default-features = false }
+alloy-tx-macros = { version = "=1.1.0", default-features = false }
 
 # serde
 serde = { version = "1", optional = true, features = ["derive"] }
@@ -64,7 +72,34 @@ std = [
     "thiserror/std",
 ]
 serde = ["dep:serde", "revm/serde"]
+# Seismic Note: we keep the js-tracer feature for foundry, but make sure to not enable this in reth, since it gives caller-supplied JavaScript
+# arbitrary live access to stack, memory, and storage during execution, which is incompatible with Seismic's privacy model.
 js-tracer = ["dep:boa_engine", "dep:boa_gc"]
 
 [patch.crates-io]
-#revm = { git = "https://github.com/bluealloy/revm", rev = "e13b609fbbc80f9e5858255e4412db95c0cc6d12" }
+alloy-primitives = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "994f7b3fbc4582c2e06a00d03c7f3fe476b1b7c7" }
+alloy-json-abi = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "994f7b3fbc4582c2e06a00d03c7f3fe476b1b7c7" }
+alloy-sol-macro-expander = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "994f7b3fbc4582c2e06a00d03c7f3fe476b1b7c7" }
+alloy-sol-macro-input = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "994f7b3fbc4582c2e06a00d03c7f3fe476b1b7c7" }
+alloy-sol-types = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "994f7b3fbc4582c2e06a00d03c7f3fe476b1b7c7" }
+alloy-sol-type-parser = { git = "https://github.com/SeismicSystems/seismic-alloy-core.git", rev = "994f7b3fbc4582c2e06a00d03c7f3fe476b1b7c7" }
+
+# Pin alloy crates to upstream v1.1.0 tag so they build against our patched alloy-primitives
+alloy-consensus = { git = "https://github.com/alloy-rs/alloy", tag = "v1.1.0" }
+alloy-eips = { git = "https://github.com/alloy-rs/alloy", tag = "v1.1.0" }
+alloy-serde = { git = "https://github.com/alloy-rs/alloy", tag = "v1.1.0" }
+alloy-network-primitives = { git = "https://github.com/alloy-rs/alloy", tag = "v1.1.0" }
+alloy-rpc-types-eth = { git = "https://github.com/alloy-rs/alloy", tag = "v1.1.0" }
+alloy-rpc-types-trace = { git = "https://github.com/alloy-rs/alloy", tag = "v1.1.0" }
+
+# Pointing to veridise-audit-feb-2026 until we merge it.
+revm = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "dc05eece19f14516ab9f996611fa7c63e1d1a8ae" }
+revm-bytecode = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "dc05eece19f14516ab9f996611fa7c63e1d1a8ae" }
+revm-database = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "dc05eece19f14516ab9f996611fa7c63e1d1a8ae" }
+revm-state = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "dc05eece19f14516ab9f996611fa7c63e1d1a8ae" }
+revm-primitives = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "dc05eece19f14516ab9f996611fa7c63e1d1a8ae" }
+revm-interpreter = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "dc05eece19f14516ab9f996611fa7c63e1d1a8ae" }
+revm-inspector = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "dc05eece19f14516ab9f996611fa7c63e1d1a8ae" }
+revm-context = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "dc05eece19f14516ab9f996611fa7c63e1d1a8ae" }
+revm-context-interface = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "dc05eece19f14516ab9f996611fa7c63e1d1a8ae" }
+revm-database-interface = { git = "https://github.com/SeismicSystems/seismic-revm.git", rev = "dc05eece19f14516ab9f996611fa7c63e1d1a8ae" }

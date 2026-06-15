@@ -9,7 +9,7 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/paradigmxyz/reth/main/assets/reth-docs.png",
     html_favicon_url = "https://avatars0.githubusercontent.com/u/97369466?s=256",
-    issue_tracker_base_url = "https://github.com/paradigmxyz/reth/issues/"
+    issue_tracker_base_url = "https://github.com/SeismicSystems/seismic-reth/issues/"
 )]
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 #![deny(unused_must_use, rust_2018_idioms)]
@@ -17,6 +17,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
+
+// Pinned deps to constrain resolution — not directly used
+use alloy_consensus as _;
+use alloy_consensus_any as _;
+use alloy_eips as _;
+use alloy_network_primitives as _;
+use alloy_serde as _;
+use alloy_tx_macros as _;
 
 /// An inspector implementation for an EIP2930 Accesslist
 pub mod access_list;
