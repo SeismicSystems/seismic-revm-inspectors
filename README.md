@@ -8,13 +8,14 @@ Seismic's fork of [revm-inspectors](https://github.com/paradigmxyz/revm-inspecto
 | ----------------------------------------- | ------------ | --------------- | ----------------------------------- |
 | Call graph (from, to, value, gas, type)   | kept         | kept            | —                                   |
 | Execution flow (pc, opcode, gas per step) | kept         | kept            | —                                   |
-| Errors / reverts                          | kept         | kept            | —                                   |
+| Errors (generic VM failure strings)       | kept         | kept            | —                                   |
 | Logs / events                             | kept         | kept            | —                                   |
 | Account balances / nonces / code          | kept         | kept            | —                                   |
 | Public storage slots                      | kept         | kept            | —                                   |
 | **Private storage slots**                 | **omitted**  | kept            | builders (`filter_private_storage`) |
 | **Calldata (all frames)**                 | **stripped** | kept            | sanitizer                           |
 | **Return data (all frames)**              | **stripped** | kept            | sanitizer                           |
+| **Revert payloads / decoded reasons**     | **stripped** | kept            | sanitizer                           |
 | **Stack**                                 | **stripped** | kept            | sanitizer (defensive)               |
 | **Memory**                                | **stripped** | kept            | sanitizer (defensive)               |
 | **VM trace push/mem/store**               | **stripped** | kept            | sanitizer                           |
@@ -28,11 +29,14 @@ This fork threads `FlaggedStorage` through the tracing pipeline and provides **c
 
 ### Trace output sanitizer (`trace_sanitizer` module)
 
-This crate also provides a `trace_sanitizer` module with functions to strip private data from built trace output. 
+Why traces need wholesale stripping while `eth_call` does not: a signed-read `eth_call` exposes only the value the contract *chose* to return to `msg.sender` (encrypted to the signer) — the contract's own code is the access-control gate, so authenticating the caller is enough. A trace bypasses that gate, exposing raw internal execution (every frame's calldata/return data, intermediate values, inner revert payloads) including shielded state the tx merely *touched* but no contract chose to reveal. Authenticating the caller can't bound that, and filtering a trace down to what one party may see would require taint-tracking every value through the interpreter; so traces are stripped unconditionally instead.
+
+This crate provides a `trace_sanitizer` module with functions to strip private data from built trace output. 
 seismic-reth calls these from every debug/trace RPC handler before returning results to callers. 
 The sanitizer handles:
 - **Calldata**: stripped from all frames unconditionally (callers already know their own calldata; for regular txs it's available via `eth_getTransactionByHash`)
-- **Return data**: stripped from all frames
+- **Return data**: stripped from all frames, including revert payloads and decoded revert reasons (custom errors can embed shielded values); generic VM error strings are kept
+- **Otterscan trace entries** (`ots_traceTransaction`): calldata and return data stripped, call metadata kept
 - **Stack/memory**: defensively stripped (should already be disabled via `TracingInspectorConfig`, but stripped as a safety net)
 - **VM trace payloads**: push values, memory deltas, storage deltas stripped from `VmExecutedOperation`
 - **FourByteTracer**: stripped (function selectors reveal which function was called)
@@ -40,7 +44,7 @@ The sanitizer handles:
 - **Logs**: passed through (public by design)
 - **Gas/opcodes**: passed through
 
-All trace privacy logic lives in this crate so auditors can review it in one place. seismic-reth's responsibility is limited to calling `sanitize_geth_trace` / `sanitize_trace_results` / `sanitize_localized_transaction_trace` on every RPC handler return path.
+All trace privacy logic lives in this crate so auditors can review it in one place. seismic-reth's responsibility is limited to calling `sanitize_geth_trace` / `sanitize_trace_results` / `sanitize_localized_transaction_trace` / `sanitize_trace_entries` / `sanitize_revert_output` on every RPC handler return path — including the otterscan (`ots_*`) handlers.
 
 ### Storage filtering (configurable)
 

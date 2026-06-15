@@ -6,14 +6,17 @@
 //!
 //! - Calldata: stripped from all frames (callers already know their own calldata; for regular txs
 //!   it's available via eth_getTransactionByHash)
-//! - Return data: stripped from all frames
+//! - Return data: stripped from all frames; this includes revert payloads and decoded revert
+//!   reasons, which are return data and can embed shielded values
 //! - VM trace payloads: push values, memory deltas, storage deltas stripped
 //! - Stack/memory: should already be disabled via TracingInspectorConfig
+//! - Otterscan trace entries (`ots_traceTransaction`): calldata and return data stripped
 
 use alloc::vec::Vec;
 use alloy_primitives::Bytes;
 use alloy_rpc_types_trace::{
     geth::{mux::MuxFrame, CallFrame, DefaultFrame, GethTrace, TraceResult},
+    otterscan::TraceEntry,
     parity::{
         Action, LocalizedTransactionTrace, TraceOutput, TraceResults,
         TraceResultsWithTransactionHash, TransactionTrace, VmInstruction, VmTrace,
@@ -76,6 +79,9 @@ fn sanitize_default_frame(mut frame: DefaultFrame) -> DefaultFrame {
 fn sanitize_call_frame(mut frame: CallFrame) -> CallFrame {
     frame.input = Bytes::new();
     frame.output = None;
+    // The decoded revert reason (Error(string)/Panic) is derived from the revert payload,
+    // i.e. return data. Keep `error` — that's the generic VM-level failure string.
+    frame.revert_reason = None;
 
     // Recursively sanitize nested calls.
     frame.calls = frame.calls.into_iter().map(sanitize_call_frame).collect();
@@ -150,6 +156,30 @@ pub fn sanitize_trace_results(mut results: TraceResults) -> TraceResults {
     // StateDiff: storage already filtered by builders. Nothing else to strip.
 
     results
+}
+
+/// Sanitizes otterscan [`TraceEntry`] frames (`ots_traceTransaction`) by stripping calldata
+/// and return data from every frame. Call metadata (type, depth, from, to, value) is kept,
+/// matching the parity sanitizer. Unlike parity, CREATE output is also stripped: deployed
+/// bytecode is public, but it's retrievable via eth_getCode and an unconditional strip is
+/// simpler to audit.
+pub fn sanitize_trace_entries(entries: Vec<TraceEntry>) -> Vec<TraceEntry> {
+    entries
+        .into_iter()
+        .map(|mut entry| {
+            entry.input = Bytes::new();
+            entry.output = Bytes::new();
+            entry
+        })
+        .collect()
+}
+
+/// Sanitizes a revert payload (`ots_getTransactionError`). Revert payloads are return data
+/// and can embed shielded values (e.g. a custom error carrying a private balance), so they
+/// are stripped like all other return data. That a transaction reverted is already public
+/// via its receipt status.
+pub fn sanitize_revert_output(_output: Bytes) -> Bytes {
+    Bytes::new()
 }
 
 /// Sanitizes [`TraceResultsWithTransactionHash`].
